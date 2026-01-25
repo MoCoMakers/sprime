@@ -98,21 +98,23 @@ See **[Development guide](docs/development.md)** for full setup, pre-commit, API
 
 The basic workflow in sprime is: **Load** raw data from CSV → **Process** (fit curves, calculate S') → **Analyze** (e.g. delta S' for comparative analysis).
 
-**Two ways to use sprime:**
+**Three ways to load data:**
 
-| Path | Your data | Required columns | What sprime does |
-|------|-----------|------------------|------------------|
-| **A — Raw (columns)** | `DATA0`..N, `CONC0`..N (one column per value) | `Cell_Line`, `Compound_ID`, `Concentration_Units` | Fits Hill → EC50, Upper, Lower, Hill, r² → S' |
-| **A — Raw (list)** | `Responses`, `Concentrations` (comma-separated in one cell each) | `Cell_Line`, `Compound_ID`, `Concentration_Units` | Same as above |
-| **B — Pre-calculated** | `AC50`, `Upper`, `Lower` (optional: Hill, r2, S') | `Cell_Line`, `Compound_ID` | Uses params as-is, computes S' if needed |
+| Path | `values_as` | Your data | Required columns | What sprime does |
+|------|-------------|-----------|------------------|------------------|
+| **A — Raw (columns)** | `"columns"` | `DATA0`..`DATAN`, `CONC0`..`CONCN` (one column per value) | `Cell_Line`, `Compound_ID`, `Concentration_Units` | Fits Hill equation coefficients and stats → AC50, Upper, Lower, Hill Slope, r² → S' |
+| **A — Raw (list)** | `"list"` | `Responses`, `Concentrations` (comma-separated in one cell each) | `Cell_Line`, `Compound_ID`, `Concentration_Units` | Same as above |
+| **B — Pre-calculated** | N/A | `AC50`, `Upper`, `Lower` (optional: Hill Slope, r2, S', etc.) | `Cell_Line`, `Compound_ID` | Uses params as-is; always computes S' (warns if S' was provided) |
 
-Use **Path A (columns)** by default (`values_as="columns"`). Use **Path A (list)** with `sp.load(..., values_as="list")` when your data has `Responses` and `Concentrations` as comma-separated values. For list format, if the CSV is comma-delimited, quote those cells (e.g. `"4000,300,2"`).
+Use **Path A (columns)** by default (`values_as="columns"`). Use **Path A (list)** with `sp.load(..., values_as="list")` when your data has `Responses` and `Concentrations` as comma-separated values. For list format, if the CSV is comma-delimited, quote those cells (e.g. `"4000,300,2"`). Any non-reserved columns in your CSV (e.g. MOA, assay_timescale) propagate forward by default into S' output and the master CSV export.
 
 ### Path A — Raw data
 
 **Templates:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) (columns), [template_raw_list.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw_list.csv) (list). See [Required headings](#required-headings) below.
 
 The **load** call changes with format; **process** does not. You must pass `values_as="columns"` (default) or `values_as="list"` — format is not auto-detected from headings.
+
+Run from the directory containing the demo CSVs (e.g. `docs/usage/`), or use paths like `docs/usage/demo_data_s_prime.csv`.
 
 **Option 1 — Columns** (DATA0..N, CONC0..N)
 
@@ -122,9 +124,10 @@ from sprime import SPrime as sp
 # Download (columns), then save locally:
 # https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_s_prime.csv
 # https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv
+# Demo files include both raw DATA/CONC and pre-calc params; refit from raw.
 
 raw_data, _ = sp.load("demo_data_s_prime.csv", values_as="columns")
-screening_data, _ = sp.process(raw_data)
+screening_data, _ = sp.process(raw_data, allow_overwrite_hill_coefficients=True)
 screening_data.export_to_csv("master_s_prime_table.csv")
 results = screening_data.to_dict_list()
 for profile in results:
@@ -166,62 +169,6 @@ for profile in results:
     print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
 ```
 
-### Required headings
-
-- **All paths:** `Cell_Line`; and `Compound_ID`. (`NCGCID` is optional pass-through per compound.)
-- **Path A (raw):** **`Concentration_Units`** (required). Either **(columns)** `DATA0`..`DATA N`, `CONC0`..`CONC N` (same N), or **(list)** `Responses` and `Concentrations` (comma-separated values in one cell each). Use `values_as="columns"` (default) or `values_as="list"`. See [Supported concentration units](#supported-concentration-units) below.
-- **Path B (pre-calc):** `AC50` (or `ec50`), `Upper` (or `Infinity`), `Lower` (or `Zero`). Optional: `Hill`, `r2`, `S'`.
-
-Template files list the exact headers; your CSV should match those.
-
-### Supported concentration units
-
-For Path A (raw), `Concentration_Units` must be present. All values are converted to **microM** internally. Supported conventions (case-insensitive): `microM`, `µM`, `um`, `microm`, `micro`; `nM`, `nanom`; `mM`, `millim`; `M`, `mol`; `pM`, `picom`.
-
-### Next steps
-
-- **Format details:** [Basic Usage Guide](docs/usage/basic_usage_guide.md)
-- **Run all scenarios:** [Demo](docs/usage/demo.py)
-
-## Usage Examples
-
-### Loading and Processing Screening Data
-
-Use your own CSV, or download a sample, then load the local file. The **load** call differs for columns vs list (`values_as`); **process** is the same. Use both CSV export and the print loop below.
-
-**Columns** (DATA0..N, CONC0..N):
-
-```python
-from sprime import SPrime as sp, ScreeningDataset
-
-# Download (columns), then save locally:
-# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_s_prime.csv
-# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv
-
-raw_data, _ = sp.load("your_data.csv", values_as="columns")
-screening_data, _ = sp.process(raw_data)
-screening_data.export_to_csv("master_s_prime_table.csv")
-results = screening_data.to_dict_list()
-for profile in results:
-    print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
-```
-
-**List** (Responses, Concentrations as comma-separated per cell):
-
-```python
-from sprime import SPrime as sp, ScreeningDataset
-
-# Download (list), then save locally:
-# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_raw_list.csv
-
-raw_data, _ = sp.load("your_data.csv", values_as="list")
-screening_data, _ = sp.process(raw_data)
-screening_data.export_to_csv("master_s_prime_table.csv")
-results = screening_data.to_dict_list()
-for profile in results:
-    print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
-```
-
 ### Delta S' example
 
 Compare drug responses between reference and test cell lines (e.g. non-tumor vs tumor). Delta S' = S'(reference) − S'(test); more negative = more effective in test tissue.
@@ -242,61 +189,40 @@ delta_results = screening_data.calculate_delta_s_prime(
     reference_cell_lines=["ipnf05.5 mc"],   # e.g. non-tumor; list supports multiple
     test_cell_lines=["ipNF96.11C"]          # e.g. tumor; list supports multiple
 )
+# Opt-in: add compound-level columns (1:1 in ref & test) to delta output and export:
+#   headings_one_to_one_in_ref_and_test=["assay_timescale"],  # etc.
+#   source_profile="test",   # "ref" or "test" — which profile to use for those values
+# Pass the same list to export_delta_s_prime_to_csv(..., headings_one_to_one_in_ref_and_test=[...])
 ScreeningDataset.export_delta_s_prime_to_csv(delta_results, "delta_s_prime_table.csv")
 
 for ref_cl, comparisons in delta_results.items():
     for c in comparisons:
-        print(f"{c['compound_name']}: ΔS' = {c['delta_s_prime']:.2f}")
+        print(f"{c['compound_name']}: Delta S' = {c['delta_s_prime']:.2f}")
 ```
 
-### Working with Individual Profiles
+### Required headings
 
-```python
-from sprime import DoseResponseProfile, Compound, CellLine, Assay
+- **All paths:** `Cell_Line`; and `Compound_ID`. (`NCGCID` is optional pass-through per compound.)
+- **Path A (raw):** **`Concentration_Units`** (required). Either **(columns)** `DATA0`..`DATA N`, `CONC0`..`CONC N` (same N), or **(list)** `Responses` and `Concentrations` (comma-separated values in one cell each). Use `values_as="columns"` (default) or `values_as="list"`. See [Supported concentration units](#supported-concentration-units) below.
+- **Path B (pre-calc):** `AC50` (or `ec50`), `Upper` (or `Infinity`), `Lower` (or `Zero`). Optional: `Hill_Slope`, `r2`, `S'`.
 
-# Create a dose-response profile
-compound = Compound(name="Trifluoperazine", drug_id="NCGC00013226-15")  # drug_id from Compound_ID column
-cell_line = CellLine(name="ipNF96.11C")
-assay = Assay(name="HTS002", readout_type="activity")
+Template files list the exact headers (required columns first); your CSV should match those. Column order in the file does not matter—matching is by header name only.
 
-profile = DoseResponseProfile(
-    compound=compound,
-    cell_line=cell_line,
-    assay=assay,
-    concentrations=[1.30E-09, 3.91E-09, 1.17E-08, ...],
-    responses=[-63.23, -66.40, -67.04, ...],
-    concentration_units="microM"
-)
+### Supported concentration units
 
-# Fit Hill curve and calculate S'
-s_prime = profile.fit_and_calculate_s_prime()
-print(f"S' = {s_prime:.2f}")
-```
+For Path A (raw), `Concentration_Units` must be present. All values are converted to **microM** internally. Supported units (case-insensitive), smallest to largest: **fM** (`fm`, `femtom`); **pM** (`pm`, `picom`); **nM** (`nm`, `nanom`); **microM** (`µM`, `um`, `microm`, `micro`); **mM** (`mm`, `millim`); **M** (`m`, `mol`).
 
-### Working with Pre-calculated Parameters
+### Next steps
 
-If your data already has fitted Hill curve parameters:
-
-```python
-from sprime import HillCurveParams
-
-# Use pre-calculated parameters
-profile.hill_params = HillCurveParams(
-    ec50=1.94,
-    upper=85.81,
-    lower=-64.77,
-    r_squared=0.95
-)
-
-# Just calculate S'
-s_prime = profile.calculate_s_prime()
-```
+- **Format details:** [Basic Usage Guide](docs/usage/basic_usage_guide.md)
+- **Run all scenarios:** [Demo](docs/usage/demo.py)
+- **Individual profiles & pre-calculated parameters:** [Basic Usage Guide](docs/usage/basic_usage_guide.md) (*Processing Individual Profiles*, *Creating dose-response profiles from scratch*, *Working with Pre-calculated Hill Parameters*)
 
 ## Key Features
 
 - **Automatic Curve Fitting**: Fits four-parameter logistic (Hill) curves to dose-response data
 - **Flexible Input**: Supports raw dose-response data or pre-calculated Hill parameters. When both exist, use `allow_overwrite_hill_coefficients=True` to refit from raw; overwrites are logged as warnings.
-- **CSV Loading**: Handles common screening data formats with automatic forward-filling of compound metadata
+- **CSV Loading**: Handles common screening data formats; rows are literal (empty = null, no forward-filling)
 - **Delta S' Analysis**: Compare drug responses across cell lines within a single assay
 - **CSV Export**: Built-in methods to export results and delta S' comparisons to CSV
 - **In-Memory Processing**: Process data directly from list of dictionaries without CSV files

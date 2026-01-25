@@ -71,7 +71,7 @@ data quality issues, warnings, and processing metrics.</p>
     
     if report.missing_drug_ids or report.missing_compound_names or \
        report.missing_cell_lines or report.insufficient_data_points or \
-       report.invalid_numeric_values or report.forward_filled_fields:
+       report.invalid_numeric_values:
         print(&#34;DATA QUALITY ISSUES:&#34;)
         if report.missing_drug_ids:
             print(f&#34;  Missing Compound IDs:       {report.missing_drug_ids}&#34;)
@@ -83,8 +83,6 @@ data quality issues, warnings, and processing metrics.</p>
             print(f&#34;  Insufficient Data Points:   {report.insufficient_data_points}&#34;)
         if report.invalid_numeric_values:
             print(f&#34;  Invalid Numeric Values:     {report.invalid_numeric_values}&#34;)
-        if report.forward_filled_fields:
-            print(f&#34;  Forward-Filled Fields:      {report.forward_filled_fields}&#34;)
         print()
     
     if report.warnings:
@@ -144,7 +142,7 @@ data quality issues, warnings, and processing metrics.</p>
     
     if report.missing_drug_ids or report.missing_compound_names or \
        report.missing_cell_lines or report.insufficient_data_points or \
-       report.invalid_numeric_values or report.forward_filled_fields:
+       report.invalid_numeric_values:
         print(&#34;DATA QUALITY ISSUES:&#34;)
         if report.missing_drug_ids:
             print(f&#34;  Missing Compound IDs:       {report.missing_drug_ids}&#34;)
@@ -156,8 +154,6 @@ data quality issues, warnings, and processing metrics.</p>
             print(f&#34;  Insufficient Data Points:   {report.insufficient_data_points}&#34;)
         if report.invalid_numeric_values:
             print(f&#34;  Invalid Numeric Values:     {report.invalid_numeric_values}&#34;)
-        if report.forward_filled_fields:
-            print(f&#34;  Forward-Filled Fields:      {report.forward_filled_fields}&#34;)
         print()
     
     if report.warnings:
@@ -226,7 +222,7 @@ data quality issues, warnings, and processing metrics.</p>
         # Data Quality Issues
         if report.missing_drug_ids or report.missing_compound_names or \
            report.missing_cell_lines or report.insufficient_data_points or \
-           report.invalid_numeric_values or report.forward_filled_fields:
+           report.invalid_numeric_values:
             f.write(&#34;DATA QUALITY ISSUES\n&#34;)
             f.write(&#34;-&#34;*80 + &#34;\n&#34;)
             if report.missing_drug_ids:
@@ -239,8 +235,6 @@ data quality issues, warnings, and processing metrics.</p>
                 f.write(f&#34;Insufficient Data Points:   {report.insufficient_data_points}\n&#34;)
             if report.invalid_numeric_values:
                 f.write(f&#34;Invalid Numeric Values:     {report.invalid_numeric_values}\n&#34;)
-            if report.forward_filled_fields:
-                f.write(f&#34;Forward-Filled Fields:      {report.forward_filled_fields}\n&#34;)
             f.write(&#34;\n&#34;)
         
         # Warnings by category

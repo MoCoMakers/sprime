@@ -232,8 +232,8 @@ class TestWarningTracking:
         with pytest.raises(ValueError, match="Required column 'Compound_ID' not found"):
             raw_data, report = SPrime.load(csv_file)
     
-    def test_forward_fill_logged(self, tmp_path):
-        """Test that forward-filled fields are logged."""
+    def test_no_forward_fill(self, tmp_path):
+        """No forward-filling; rows are literal, empty is null."""
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
@@ -244,7 +244,8 @@ class TestWarningTracking:
                 'Conc0': '0.1'
             },
             {
-                # Compound Name forward-filled
+                'Compound Name': 'Test',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell2',
                 'Concentration_Units': 'microM',
                 'Data0': '20',
@@ -254,11 +255,9 @@ class TestWarningTracking:
         
         raw_data, report = SPrime.load(csv_file)
         
-        # Should have warning for forward-fill
-        forward_fill_warnings = [w for w in report.warnings 
-                                if w.category == "FORWARD_FILL"]
-        assert len(forward_fill_warnings) >= 1
-        assert report.forward_filled_fields >= 1
+        forward_fill_warnings = [w for w in report.warnings if w.category == "FORWARD_FILL"]
+        assert len(forward_fill_warnings) == 0
+        assert report.forward_filled_fields == 0
     
     def test_insufficient_data_points_logged(self, tmp_path):
         """Test that insufficient data points are logged."""
@@ -588,21 +587,31 @@ class TestReportMetrics:
                 'Cell_Line': 'Cell1',
                 'Concentration_Units': 'microM',
                 'Data0': '10',
-                'Conc0': '0.1'
+                'Data1': '20',
+                'Data2': '50',
+                'Data3': '90',
+                'Conc0': '0.1',
+                'Conc1': '1',
+                'Conc2': '10',
+                'Conc3': '100',
             },
             {
-                # Missing Compound_ID - should be row 3
                 'Compound Name': 'Test2',
+                'Compound_ID': 'TEST2',
                 'Cell_Line': 'Cell2',
                 'Concentration_Units': 'microM',
                 'Data0': '20',
-                'Conc0': '0.2'
+                'Data1': '30',
+                'Data2': '40',
+                'Conc0': '0.1',
+                'Conc1': '1',
+                'Conc2': '10',
             }
         ], tmp_path)
         
         raw_data, report = SPrime.load(csv_file)
         
-        missing_id_warnings = [w for w in report.warnings 
-                              if "Compound_ID" in w.message and w.row_number > 0]
-        assert len(missing_id_warnings) == 1
-        assert missing_id_warnings[0].row_number == 3  # Row 3 (header is row 1)
+        insufficient_warnings = [w for w in report.warnings 
+                                if "Insufficient data points" in w.message and w.row_number > 0]
+        assert len(insufficient_warnings) >= 1
+        assert insufficient_warnings[0].row_number == 3

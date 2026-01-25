@@ -6,9 +6,10 @@ S' (S prime) values from quantitative high-throughput screening (QHTS) data.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Dict, List, Union, Tuple
+from typing import Optional, Dict, List, Union, Tuple, Set, Literal
 import csv
 import math
+import re
 import warnings
 from pathlib import Path
 
@@ -329,6 +330,49 @@ def _validate_required_columns(
         )
 
 
+def _reserved_column_names(values_as: str, columns: List[str]) -> Set[str]:
+    """
+    Return the set of reserved column names (required + structural + pre-calc only).
+    Used to exclude these from generic metadata pass-through at S' load. All other
+    columns are stored as metadata under exact header, value as-is.
+    """
+    reserved = {
+        "Compound_ID", "Cell_Line", "Compound Name", "pubchem_sid", "SMILES", "NCGCID",
+        "Cell_Line_Ref_ID", "Concentration_Units",
+        "AC50", "ec50", "Upper", "Lower", "Infinity", "Zero", "Hill_Slope", "Hill", "slope",
+        "r2", "R²", "Rank", "S'", "S Prime", "Responses", "Concentrations",
+    }
+    if values_as == "columns":
+        for c in columns:
+            if re.match(r"^data\d+$", c, re.IGNORECASE) or re.match(r"^conc\d+$", c, re.IGNORECASE):
+                reserved.add(c)
+    return reserved
+
+
+def _resolve_moa(meta: Optional[Dict]) -> str:
+    """Resolve MOA from metadata (checks MOA, MoA, moa). Used only for delta S' output."""
+    if not meta:
+        return ""
+    for k in ("MOA", "MoA", "moa"):
+        v = meta.get(k, "")
+        v = v if isinstance(v, str) else str(v)
+        if v.strip():
+            return v
+    return ""
+
+
+def _resolve_drug_targets(meta: Optional[Dict]) -> str:
+    """Resolve drug targets from metadata (checks drug targets, Target, target). Used only for delta S' output."""
+    if not meta:
+        return ""
+    for k in ("drug targets", "Target", "target"):
+        v = meta.get(k, "")
+        v = v if isinstance(v, str) else str(v)
+        if v.strip():
+            return v
+    return ""
+
+
 def _convert_dataframe_to_dict_list(df) -> List[Dict]:
     """
     Convert pandas DataFrame to list of dictionaries.
@@ -391,7 +435,6 @@ class RawDataset:
         Load CSV file and create RawDataset with quality reporting.
         
         Handles:
-        - Forward-filling compound info
         - Extracting raw data (Data0..DataN, Conc0..ConcN) or Responses/Concentrations
         - Loading pre-calculated params (AC50, Upper, Lower) if present
         - Creating DoseResponseProfile objects
@@ -446,12 +489,7 @@ class RawDataset:
                 return raw_dataset, None
             return raw_dataset, report
         
-        # Forward-fill compound info (including metadata like MOA, drug targets, NCGCID pass-through)
-        compound_cols = [
-            'Compound Name', 'Compound_ID', 'NCGCID', 'pubchem_sid (substance id)', 'SMILES',
-            'drug targets', 'MOA', 'Target', 'MoA', 'moa', 'target'
-        ]
-        last_compound_values = {col: None for col in compound_cols}
+        reserved = _reserved_column_names(values_as, fieldnames or [])
         
         # Track compounds seen
         compounds_seen = set()
@@ -479,26 +517,8 @@ class RawDataset:
                     f"All rows must have a cell line specified."
                 )
             
-            # Forward-fill compound info
-            for col in compound_cols:
-                value = row.get(col, '')
-                if value:
-                    value = value.strip() if isinstance(value, str) else str(value)
-                    if value:
-                        last_compound_values[col] = value
-                elif last_compound_values[col] is not None:
-                    row[col] = last_compound_values[col]
-                    if report:
-                        report.add_warning(
-                            row_number=row_num,
-                            category="FORWARD_FILL",
-                            message=f"{col} forward-filled from previous row",
-                            cell_line=cell_line_name,
-                            field_name=col
-                        )
-                        report.forward_filled_fields += 1
-            
             # Get compound info (Compound_ID required; NCGCID is pass-through only)
+            # Rows are taken literally: empty values are null, no forward-filling.
             compound_name = row.get('Compound Name', '').strip() or 'Unknown'
             compound_id = row.get('Compound_ID', '').strip()
             
@@ -529,7 +549,7 @@ class RawDataset:
             compound = Compound(
                 name=compound_name,
                 drug_id=compound_id,
-                pubchem_sid=row.get('pubchem_sid (substance id', '').strip() or None,
+                pubchem_sid=row.get('pubchem_sid', '').strip() or None,
                 smiles=row.get('SMILES', '').strip() or None
             )
             
@@ -748,7 +768,7 @@ class RawDataset:
                         ec50=float(ac50),
                         upper=float(row.get('Upper', row.get('Infinity', '0')).strip() or '0'),
                         lower=float(row.get('Lower', row.get('Zero', '0')).strip() or '0'),
-                        hill_coefficient=_try_float(row.get('Hill', row.get('slope', ''))),
+                        hill_coefficient=_try_float(row.get('Hill_Slope', row.get('Hill', row.get('slope', '')))),
                         r_squared=r_sq
                     )
                 except (ValueError, TypeError):
@@ -770,15 +790,14 @@ class RawDataset:
                     f"(2) pre-calculated parameters (AC50/Upper/Lower)."
                 )
             
-            # Extract metadata (MOA, drug targets, etc.)
+            # Extract metadata: generic pass-through (all non-reserved columns, exact header, value as-is)
             metadata = {}
-            metadata_cols = ['drug targets', 'MOA', 'Target', 'MoA', 'moa', 'target']
-            for col in metadata_cols:
-                value = row.get(col, '').strip() if isinstance(row.get(col, ''), str) else str(row.get(col, ''))
-                if value:
-                    # Use the first non-empty value found (prefer capitalized versions)
-                    if col.lower() not in [k.lower() for k in metadata.keys()]:
-                        metadata[col] = value
+            for col in row.keys():
+                if col in reserved:
+                    continue
+                raw = row.get(col, "")
+                raw = raw if isinstance(raw, str) else str(raw)
+                metadata[col] = raw
             
             # Create profile
             profile = DoseResponseProfile(
@@ -845,9 +864,9 @@ class RawDataset:
         
         For each profile:
         1. Fit Hill curve when raw data exists, or use pre-calc when no raw.
-        2. Calculate S' if needed (has params but no S').
+        2. Always compute S' from Hill params; warn if S' was provided in input and is overwritten.
         
-        When both raw data and pre-calc (AC50/Upper/Lower/Hill/r2) exist:
+        When both raw data and pre-calc (AC50/Upper/Lower/Hill_Slope/r2) exist:
         - allow_overwrite_hill_coefficients=False (default): raise (would overwrite).
         - allow_overwrite_hill_coefficients=True: fit, overwrite pre-calc, and log
           a warning that pre-calc Hill params were overwritten.
@@ -855,7 +874,7 @@ class RawDataset:
         Args:
             report: Optional ProcessingReport to accumulate warnings (creates new if None)
             allow_overwrite_hill_coefficients: If True, allow overwriting pre-calc
-                Hill params (AC50, Upper, Lower, Hill, r2) with fitted values.
+                Hill params (AC50, Upper, Lower, Hill_Slope, r2) with fitted values.
                 Default False: raise when we would overwrite.
             **fit_params: Parameters for curve fitting (e.g. maxfev, bounds).
             
@@ -898,7 +917,7 @@ class RawDataset:
             if has_raw:
                 if had_precalc and not allow_overwrite_hill_coefficients:
                     raise ValueError(
-                        f"Pre-calculated Hill parameters (AC50, Upper, Lower, Hill, r2) would be "
+                        f"Pre-calculated Hill parameters (AC50, Upper, Lower, Hill_Slope, r2) would be "
                         f"overwritten by fitted values for compound '{processed_profile.compound.name}' "
                         f"(Compound_ID: {processed_profile.compound.drug_id}) in cell line "
                         f"'{processed_profile.cell_line.name}'. "
@@ -915,7 +934,7 @@ class RawDataset:
                     )
                 if had_precalc:
                     msg = (
-                        f"Pre-calc Hill parameters (AC50, Upper, Lower, Hill, r2) overwritten by "
+                        f"Pre-calc Hill parameters (AC50, Upper, Lower, Hill_Slope, r2) overwritten by "
                         f"fitted values for '{processed_profile.compound.name}' / "
                         f"'{processed_profile.cell_line.name}'."
                     )
@@ -964,16 +983,30 @@ class RawDataset:
                         cell_line=processed_profile.cell_line.name
                     )
             
-            # Calculate S' if needed
-            if processed_profile.s_prime is None:
-                try:
-                    processed_profile.calculate_s_prime()
-                except Exception as e:
-                    raise ValueError(
-                        f"S' calculation failed for compound '{processed_profile.compound.name}' "
-                        f"(Compound_ID: {processed_profile.compound.drug_id}) in cell line "
-                        f"'{processed_profile.cell_line.name}': {str(e)}"
+            # Always compute S'; warn if overwriting existing S' from CSV
+            if processed_profile.s_prime is not None:
+                msg = (
+                    f"S' overwritten by recomputation for '{processed_profile.compound.name}' / "
+                    f"'{processed_profile.cell_line.name}' (S' was provided in input)."
+                )
+                warnings.warn(msg, UserWarning, stacklevel=2)
+                if report:
+                    report.add_warning(
+                        row_number=0,
+                        category="OVERWRITE_S_PRIME",
+                        message=msg,
+                        drug_id=processed_profile.compound.drug_id,
+                        compound_name=processed_profile.compound.name,
+                        cell_line=processed_profile.cell_line.name,
                     )
+            try:
+                processed_profile.calculate_s_prime()
+            except Exception as e:
+                raise ValueError(
+                    f"S' calculation failed for compound '{processed_profile.compound.name}' "
+                    f"(Compound_ID: {processed_profile.compound.drug_id}) in cell line "
+                    f"'{processed_profile.cell_line.name}': {str(e)}"
+                )
             
             # Validate S' was calculated
             if processed_profile.s_prime is None:
@@ -1074,26 +1107,38 @@ class ScreeningDataset:
     def calculate_delta_s_prime(
         self,
         reference_cell_lines: Union[str, List[str]],
-        test_cell_lines: Union[str, List[str]]
+        test_cell_lines: Union[str, List[str]],
+        headings_one_to_one_in_ref_and_test: Optional[List[str]] = None,
+        source_profile: Literal["ref", "test"] = "test",
     ) -> Dict[str, List[Dict]]:
         """
         Calculate delta S' = S'(ref) - S'(test) for each compound.
         
+        Compound-level columns (1:1 per compound, not per cell line) auto-propagate:
+        MOA and drug targets are reserved and always included; additional headings
+        may be specified via headings_one_to_one_in_ref_and_test. Values are taken
+        from the ref or test profile according to source_profile.
+        
         Args:
             reference_cell_lines: Reference cell line name(s)
             test_cell_lines: Test cell line name(s)
+            headings_one_to_one_in_ref_and_test: Optional list of metadata headings
+                that exist 1:1 in ref and test; included in output, values from
+                source_profile.
+            source_profile: 'ref' or 'test'; which profile to use for compound-level
+                values (MOA, drug targets, and optional headings).
             
         Returns:
             Dictionary with keys for each reference cell line, containing
-            lists of dicts with delta S' for each compound-test_cellline combo
+            lists of dicts with delta S' and compound-level fields per combo.
         """
         ref_list = [reference_cell_lines] if isinstance(reference_cell_lines, str) else reference_cell_lines
         test_list = [test_cell_lines] if isinstance(test_cell_lines, str) else test_cell_lines
+        extra_headings = headings_one_to_one_in_ref_and_test or []
         
         results = {}
         for ref_cellline in ref_list:
             rows = []
-            # Get all unique compounds
             compounds = {profile.compound.drug_id: profile.compound for profile in self._profiles.values()}
             
             for drug_id, compound in compounds.items():
@@ -1107,7 +1152,8 @@ class ScreeningDataset:
                         continue
                     
                     delta = ref_profile.s_prime - test_profile.s_prime
-                    rows.append({
+                    source_meta = (ref_profile.metadata if source_profile == "ref" else test_profile.metadata) or {}
+                    row = {
                         'compound_name': compound.name,
                         'drug_id': drug_id,
                         'reference_cell_line': ref_cellline,
@@ -1115,7 +1161,12 @@ class ScreeningDataset:
                         's_prime_ref': ref_profile.s_prime,
                         's_prime_test': test_profile.s_prime,
                         'delta_s_prime': delta,
-                    })
+                        'MOA': _resolve_moa(source_meta),
+                        'drug targets': _resolve_drug_targets(source_meta),
+                    }
+                    for h in extra_headings:
+                        row[h] = source_meta.get(h, "")
+                    rows.append(row)
             
             results[ref_cellline] = rows
         
@@ -1154,93 +1205,110 @@ class ScreeningDataset:
         """
         Export all profiles to CSV file.
         
+        Base columns (identifiers, Hill params, S', Rank) are always written.
+        When include_metadata is True, all generic metadata keys (union across
+        profiles) are included as pass-through columns.
+        
         Args:
             filepath: Path to output CSV file
-            include_metadata: Whether to include metadata columns (MOA, drug targets)
+            include_metadata: When True, include all metadata columns. When False,
+                only base columns.
         """
         filepath = Path(filepath)
         profiles = sorted(self.profiles, key=lambda p: (p.compound.name, p.cell_line.name))
         
-        fieldnames = [
-            'Compound Name', 'Compound_ID', 'pubchem_sid (substance id)', 'SMILES',
+        base_fieldnames = [
+            'Compound Name', 'Compound_ID', 'pubchem_sid', 'SMILES',
             'Cell_Line', 'Cell_Line_Ref_ID',
-            'EC50', 'Upper', 'Lower', 'Hill', 'r2',
+            'EC50', 'Upper', 'Lower', 'Hill_Slope', 'r2',
             "S'", 'Rank'
         ]
-        
-        if include_metadata:
-            fieldnames.extend(['drug targets', 'MOA'])
+        all_meta_keys = sorted(set(
+            k for p in profiles if p.metadata for k in p.metadata
+        ))
+        fieldnames = list(base_fieldnames)
+        if include_metadata and all_meta_keys:
+            fieldnames.extend(all_meta_keys)
         
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             
             for profile in profiles:
+                meta = profile.metadata or {}
                 row = {
                     'Compound Name': profile.compound.name,
                     'Compound_ID': profile.compound.drug_id,
-                    'pubchem_sid (substance id)': profile.compound.pubchem_sid or '',
+                    'pubchem_sid': profile.compound.pubchem_sid or '',
                     'SMILES': profile.compound.smiles or '',
                     'Cell_Line': profile.cell_line.name,
                     'Cell_Line_Ref_ID': profile.cell_line.ref_id or '',
                     'EC50': f"{profile.hill_params.ec50:.6e}" if profile.hill_params else '',
                     'Upper': f"{profile.hill_params.upper:.2f}" if profile.hill_params else '',
                     'Lower': f"{profile.hill_params.lower:.2f}" if profile.hill_params else '',
-                    'Hill': f"{profile.hill_params.hill_coefficient:.4f}" if profile.hill_params and profile.hill_params.hill_coefficient else '',
+                    'Hill_Slope': f"{profile.hill_params.hill_coefficient:.4f}" if profile.hill_params and profile.hill_params.hill_coefficient else '',
                     'r2': f"{profile.hill_params.r_squared:.4f}" if profile.hill_params and profile.hill_params.r_squared is not None else '',
                     "S'": f"{profile.s_prime:.4f}" if profile.s_prime else '',
                     'Rank': str(profile.rank) if profile.rank else '',
                 }
-                
-                if include_metadata and profile.metadata:
-                    row['drug targets'] = profile.metadata.get('drug targets', '')
-                    row['MOA'] = profile.metadata.get('MOA', '')
-                elif include_metadata:
-                    row['drug targets'] = ''
-                    row['MOA'] = ''
+                if include_metadata and all_meta_keys:
+                    for k in all_meta_keys:
+                        row[k] = meta.get(k, '')
                 
                 writer.writerow(row)
     
     @staticmethod
     def export_delta_s_prime_to_csv(
         delta_results: Dict[str, List[Dict]],
-        filepath: Union[str, Path]
+        filepath: Union[str, Path],
+        headings_one_to_one_in_ref_and_test: Optional[List[str]] = None,
     ) -> None:
         """
         Export delta S' results to CSV file.
         
+        Includes compound-level columns: MOA, drug targets (reserved), plus any
+        headings specified in headings_one_to_one_in_ref_and_test. These must
+        match the headings passed to calculate_delta_s_prime when producing
+        delta_results.
+        
         Args:
             delta_results: Dictionary from calculate_delta_s_prime()
             filepath: Path to output CSV file
+            headings_one_to_one_in_ref_and_test: Optional list of metadata
+                headings included in delta output (same as for calculate_delta_s_prime).
         """
         filepath = Path(filepath)
+        extra_headings = headings_one_to_one_in_ref_and_test or []
         
-        # Flatten results for export
         flat_results = []
         for ref_cellline, comparisons in delta_results.items():
             for comp in comparisons:
-                flat_results.append({
+                row = {
                     'Compound Name': comp.get('compound_name', ''),
                     'Compound_ID': comp.get('drug_id', ''),
                     'Reference_Cell_Line': comp.get('reference_cell_line', ''),
                     'Test_Cell_Line': comp.get('test_cell_line', ''),
                     "S' (Reference)": f"{comp.get('s_prime_ref', 0.0):.4f}",
                     "S' (Test)": f"{comp.get('s_prime_test', 0.0):.4f}",
-                    "Delta S'": f"{comp.get('delta_s_prime', 0.0):.4f}"
-                })
+                    "Delta S'": f"{comp.get('delta_s_prime', 0.0):.4f}",
+                    'MOA': comp.get('MOA', ''),
+                    'drug targets': comp.get('drug targets', ''),
+                }
+                for h in extra_headings:
+                    row[h] = comp.get(h, '')
+                flat_results.append(row)
         
-        # Sort by delta S' (most negative first)
         flat_results.sort(key=lambda x: float(x["Delta S'"]))
-        
-        # Add rank
         for rank, result in enumerate(flat_results, start=1):
             result['Rank'] = str(rank)
         
         fieldnames = [
             'Rank', 'Compound Name', 'Compound_ID',
             'Reference_Cell_Line', 'Test_Cell_Line',
-            "S' (Reference)", "S' (Test)", "Delta S'"
+            "S' (Reference)", "S' (Test)", "Delta S'",
+            'MOA', 'drug targets',
         ]
+        fieldnames.extend(extra_headings)
         
         with open(filepath, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -1377,11 +1445,8 @@ class SPrime:
             report.total_rows = len(list_of_rows)
         
         # Process rows (similar to get_s_prime_from_data but add to RawDataset)
-        compound_cols = [
-            'Compound Name', 'Compound_ID', 'NCGCID', 'pubchem_sid (substance id)', 'SMILES',
-            'drug targets', 'MOA', 'Target', 'MoA', 'moa', 'target'
-        ]
-        last_compound_values = {col: None for col in compound_cols}
+        # Rows are taken literally: empty values are null, no forward-filling.
+        reserved = _reserved_column_names(values_as, first_row_keys)
         compounds_seen = set()
         
         for row_idx, row in enumerate(list_of_rows):
@@ -1405,25 +1470,6 @@ class SPrime:
                     f"All rows must have a cell line specified."
                 )
             
-            # Forward-fill compound info
-            for col in compound_cols:
-                value = row.get(col, '')
-                if value:
-                    value = value.strip() if isinstance(value, str) else str(value)
-                    if value:
-                        last_compound_values[col] = value
-                elif last_compound_values[col] is not None:
-                    row[col] = last_compound_values[col]
-                    if report:
-                        report.add_warning(
-                            row_number=row_idx + 1,
-                            category="FORWARD_FILL",
-                            message=f"{col} forward-filled from previous row",
-                            cell_line=cell_line_name,
-                            field_name=col
-                        )
-                        report.forward_filled_fields += 1
-            
             # Get compound info (Compound_ID required; NCGCID pass-through only)
             compound_name = row.get('Compound Name', '').strip() or 'Unknown'
             compound_id = row.get('Compound_ID', '').strip()
@@ -1444,7 +1490,7 @@ class SPrime:
             compound = Compound(
                 name=compound_name,
                 drug_id=compound_id,
-                pubchem_sid=row.get('pubchem_sid (substance id)', '').strip() or None,
+                pubchem_sid=row.get('pubchem_sid', '').strip() or None,
                 smiles=row.get('SMILES', '').strip() or None
             )
             
@@ -1544,7 +1590,7 @@ class SPrime:
                         ec50=float(ac50),
                         upper=float(row.get('Upper', row.get('Infinity', '0')).strip() or '0'),
                         lower=float(row.get('Lower', row.get('Zero', '0')).strip() or '0'),
-                        hill_coefficient=_try_float(row.get('Hill', row.get('slope', ''))),
+                        hill_coefficient=_try_float(row.get('Hill_Slope', row.get('Hill', row.get('slope', '')))),
                         r_squared=_try_float(row.get('r2', row.get('R²', '')))
                     )
                 except (ValueError, TypeError):
@@ -1566,14 +1612,14 @@ class SPrime:
             s_prime = _try_float(row.get("S'", row.get('S Prime', '')))
             rank = _try_int(row.get('Rank', ''))
             
-            # Extract metadata
+            # Extract metadata: generic pass-through (all non-reserved columns, exact header, value as-is)
             metadata = {}
-            metadata_cols = ['drug targets', 'MOA', 'Target', 'MoA', 'moa', 'target']
-            for col in metadata_cols:
-                value = row.get(col, '').strip() if isinstance(row.get(col, ''), str) else str(row.get(col, ''))
-                if value:
-                    if col.lower() not in [k.lower() for k in metadata.keys()]:
-                        metadata[col] = value
+            for col in row.keys():
+                if col in reserved:
+                    continue
+                raw = row.get(col, "")
+                raw = raw if isinstance(raw, str) else str(raw)
+                metadata[col] = raw
             
             # Create profile
             profile = DoseResponseProfile(
@@ -1616,7 +1662,7 @@ class SPrime:
             raw_dataset: RawDataset to process
             report: Optional ProcessingReport to accumulate warnings (reuses from load if None)
             allow_overwrite_hill_coefficients: If True, allow overwriting pre-calc
-                Hill params (AC50, Upper, Lower, Hill, r2) with fitted values when
+                Hill params (AC50, Upper, Lower, Hill_Slope, r2) with fitted values when
                 both raw and pre-calc exist. Default False (raise). When True,
                 overwrites are logged as warnings.
             **fit_params: Parameters for curve fitting (e.g. maxfev, bounds).
@@ -1808,13 +1854,7 @@ def get_s_prime_from_data(
     if report:
         report.total_rows = len(list_of_rows)
     
-    # Forward-fill compound info (including metadata, NCGCID pass-through)
-    compound_cols = [
-        'Compound Name', 'Compound_ID', 'NCGCID', 'pubchem_sid (substance id)', 'SMILES',
-        'drug targets', 'MOA', 'Target', 'MoA', 'moa', 'target'
-    ]
-    last_compound_values = {col: None for col in compound_cols}
-    
+    reserved = _reserved_column_names(values_as, first_row_keys)
     compounds_seen = set()
     
     for row_idx, row in enumerate(list_of_rows):
@@ -1839,25 +1879,6 @@ def get_s_prime_from_data(
                 f"Row {row_idx + 1}: Missing required 'Cell_Line' value in in-memory data. "
                 f"All rows must have a cell line specified."
             )
-        
-        # Forward-fill compound info
-        for col in compound_cols:
-            value = row.get(col, '')
-            if value:
-                value = value.strip() if isinstance(value, str) else str(value)
-                if value:
-                    last_compound_values[col] = value
-            elif last_compound_values[col] is not None:
-                row[col] = last_compound_values[col]
-                if report:
-                    report.add_warning(
-                        row_number=0,
-                        category="FORWARD_FILL",
-                        message=f"{col} forward-filled from previous row",
-                        cell_line=cell_line_name,
-                        field_name=col
-                    )
-                    report.forward_filled_fields += 1
         
         # Get compound info (Compound_ID required; NCGCID pass-through only)
         compound_name = row.get('Compound Name', '').strip() or 'Unknown'
@@ -1890,7 +1911,7 @@ def get_s_prime_from_data(
         compound = Compound(
             name=compound_name,
             drug_id=compound_id,
-            pubchem_sid=row.get('pubchem_sid (substance id)', '').strip() or None,
+            pubchem_sid=row.get('pubchem_sid', '').strip() or None,
             smiles=row.get('SMILES', '').strip() or None
         )
         
@@ -1990,7 +2011,7 @@ def get_s_prime_from_data(
                     ec50=float(ac50),
                     upper=float(row.get('Upper', row.get('Infinity', '0')).strip() or '0'),
                     lower=float(row.get('Lower', row.get('Zero', '0')).strip() or '0'),
-                    hill_coefficient=_try_float(row.get('Hill', row.get('slope', ''))),
+                    hill_coefficient=_try_float(row.get('Hill_Slope', row.get('Hill', row.get('slope', '')))),
                     r_squared=_try_float(row.get('r2', row.get('R²', '')))
                 )
             except (ValueError, TypeError):
@@ -2012,14 +2033,14 @@ def get_s_prime_from_data(
         s_prime = _try_float(row.get("S'", row.get('S Prime', '')))
         rank = _try_int(row.get('Rank', ''))
         
-        # Extract metadata
+        # Extract metadata: generic pass-through (all non-reserved columns, exact header, value as-is)
         metadata = {}
-        metadata_cols = ['drug targets', 'MOA', 'Target', 'MoA', 'moa', 'target']
-        for col in metadata_cols:
-            value = row.get(col, '').strip() if isinstance(row.get(col, ''), str) else str(row.get(col, ''))
-            if value:
-                if col.lower() not in [k.lower() for k in metadata.keys()]:
-                    metadata[col] = value
+        for col in row.keys():
+            if col in reserved:
+                continue
+            raw = row.get(col, "")
+            raw = raw if isinstance(raw, str) else str(raw)
+            metadata[col] = raw
         
         # Create profile
         profile = DoseResponseProfile(
@@ -2064,39 +2085,45 @@ def get_s_prime_from_data(
 def calculate_delta_s_prime(
     s_prime_data: Union[ScreeningDataset, List[Dict]],
     reference_cell_line_names: Union[str, List[str]],
-    test_cell_line_names: Union[str, List[str]]
+    test_cell_line_names: Union[str, List[str]],
+    headings_one_to_one_in_ref_and_test: Optional[List[str]] = None,
+    source_profile: Literal["ref", "test"] = "test",
 ) -> Dict[str, List[Dict]]:
     """
     Calculate delta S' between reference and test cell lines.
     
     Matches original pseudo-code: delta_s_prime()
     
+    Compound-level columns (MOA, drug targets, optional headings) auto-propagate;
+    see ScreeningDataset.calculate_delta_s_prime for details.
+    
     Args:
         s_prime_data: ScreeningDataset or list of dicts with S' values
         reference_cell_line_names: Reference cell line name(s)
         test_cell_line_names: Test cell line name(s)
+        headings_one_to_one_in_ref_and_test: Optional list of metadata headings
+            that exist 1:1 in ref and test; included in output.
+        source_profile: 'ref' or 'test'; which profile to use for compound-level values.
         
     Returns:
         Dictionary with keys for each reference cell line, containing
-        lists of dicts with delta S' for each compound-test_cellline combo
+        lists of dicts with delta S' and compound-level fields per combo.
     """
     if isinstance(s_prime_data, ScreeningDataset):
         return s_prime_data.calculate_delta_s_prime(
             reference_cell_line_names,
-            test_cell_line_names
+            test_cell_line_names,
+            headings_one_to_one_in_ref_and_test=headings_one_to_one_in_ref_and_test,
+            source_profile=source_profile,
         )
     else:
-        # Convert list of dicts to ScreeningDataset
-        # First, reconstruct profiles from the dict list
         if not s_prime_data:
             return {}
         
-        # Infer assay name from first entry
         assay_name = s_prime_data[0].get('assay', 'Unknown')
         assay = Assay(name=assay_name)
         screening_dataset = ScreeningDataset(assay=assay)
         
-        # Reconstruct profiles from dict list
         for row in s_prime_data:
             compound = Compound(
                 name=row.get('compound_name', 'Unknown'),
@@ -2109,7 +2136,6 @@ def calculate_delta_s_prime(
                 ref_id=None
             )
             
-            # Reconstruct HillCurveParams if available
             hill_params = None
             if row.get('ec50') is not None:
                 hill_params = HillCurveParams(
@@ -2133,18 +2159,17 @@ def calculate_delta_s_prime(
                 metadata=None
             )
             
-            # Only add if it has S' calculated
             if profile.s_prime is not None and profile.hill_params is not None:
                 try:
                     screening_dataset.add_profile(profile)
                 except ValueError:
-                    # Profile already exists or invalid, skip
                     continue
         
-        # Calculate delta S'
         return screening_dataset.calculate_delta_s_prime(
             reference_cell_line_names,
-            test_cell_line_names
+            test_cell_line_names,
+            headings_one_to_one_in_ref_and_test=headings_one_to_one_in_ref_and_test,
+            source_profile=source_profile,
         )
 
 
@@ -2158,7 +2183,9 @@ def convert_to_micromolar(concentrations: List[float], units: str) -> List[float
     
     Args:
         concentrations: List of concentration values
-        units: Current units (e.g., 'microM', 'mM', 'nM', 'M', 'mol')
+        units: Current units. Supported (case-insensitive), smallest to largest:
+            fM (fm, femtom); pM (pm, picom); nM (nm, nanom);
+            microM (µm, um, microm, micro); mM (mm, millim); M (m, mol).
         
     Returns:
         List of concentrations in microMolar
@@ -2166,6 +2193,12 @@ def convert_to_micromolar(concentrations: List[float], units: str) -> List[float
     units_lower = units.lower().strip()
     
     conversion_factors = {
+        'fm': 1e-9,
+        'femtom': 1e-9,
+        'pm': 1e-6,
+        'picom': 1e-6,
+        'nm': 0.001,
+        'nanom': 0.001,
         'microm': 1.0,
         'micro': 1.0,
         'μm': 1.0,
@@ -2174,10 +2207,6 @@ def convert_to_micromolar(concentrations: List[float], units: str) -> List[float
         'millim': 1000.0,
         'm': 1000000.0,
         'mol': 1000000.0,
-        'nm': 0.001,
-        'nanom': 0.001,
-        'pm': 0.000001,
-        'picom': 0.000001,
     }
     
     factor = conversion_factors.get(units_lower, 1.0)

@@ -52,7 +52,9 @@ class TestCompleteWorkflow:
                 'Conc4': '100',
             },
             {
-                'Cell_Line': 'Test Cell Line',  # Forward-fill compound info
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Test Cell Line',
                 'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
@@ -175,7 +177,7 @@ class TestCompleteWorkflow:
                 'AC50': '10.0',
                 'Upper': '100.0',
                 'Lower': '0.0',
-                'Hill': '1.5',
+                'Hill_Slope': '1.5',
                 'r2': '0.95',
             }
         ]
@@ -264,6 +266,8 @@ class TestCompleteWorkflow:
                 'Conc3': '100',
             },
             {
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Test',
                 'Concentration_Units': 'microM',
                 'Data0': '10',
@@ -307,6 +311,177 @@ class TestCompleteWorkflow:
         finally:
             csv_file.unlink()
 
+    def test_assay_timescale_propagates_raw(self):
+        """Raw import (DATA/CONC): assay_timescale 24hr/48hr propagates to S' metadata and master export."""
+        rows = [
+            {
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Reference',
+                'Concentration_Units': 'microM',
+                'assay_timescale': '24hr',
+                'Data0': '5',
+                'Data1': '10',
+                'Data2': '30',
+                'Data3': '70',
+                'Conc0': '0.1',
+                'Conc1': '1',
+                'Conc2': '10',
+                'Conc3': '100',
+            },
+            {
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Test',
+                'Concentration_Units': 'microM',
+                'assay_timescale': '48hr',
+                'Data0': '10',
+                'Data1': '20',
+                'Data2': '50',
+                'Data3': '90',
+                'Conc0': '0.1',
+                'Conc1': '1',
+                'Conc2': '10',
+                'Conc3': '100',
+            },
+        ]
+        csv_file = self.create_test_csv(rows)
+        try:
+            raw_data, _ = SPrime.load(csv_file)
+            screening_data, _ = SPrime.process(raw_data)
+            profiles = sorted(screening_data.profiles, key=lambda p: p.cell_line.name)
+            assert len(profiles) == 2
+            ref_prof = next(p for p in profiles if p.cell_line.name == 'Reference')
+            test_prof = next(p for p in profiles if p.cell_line.name == 'Test')
+            assert ref_prof.metadata is not None and ref_prof.metadata.get('assay_timescale') == '24hr'
+            assert test_prof.metadata is not None and test_prof.metadata.get('assay_timescale') == '48hr'
+
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
+                export_file = Path(f.name)
+            screening_data.export_to_csv(export_file, include_metadata=True)
+            with open(export_file, 'r') as f:
+                reader = csv.DictReader(f)
+                exported = list(reader)
+            assert 'assay_timescale' in exported[0]
+            vals = {r['Cell_Line']: r['assay_timescale'] for r in exported}
+            assert vals['Reference'] == '24hr' and vals['Test'] == '48hr'
+            export_file.unlink()
+        finally:
+            csv_file.unlink()
+
+    def test_assay_timescale_propagates_precalc(self):
+        """Precalc import (AC50/Upper/Lower only): assay_timescale 24hr/48hr propagates to S' metadata and master export."""
+        rows = [
+            {
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Reference',
+                'AC50': '10.0',
+                'Upper': '100.0',
+                'Lower': '0.0',
+                'assay_timescale': '24hr',
+            },
+            {
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Test',
+                'AC50': '8.0',
+                'Upper': '100.0',
+                'Lower': '0.0',
+                'assay_timescale': '48hr',
+            },
+        ]
+        csv_file = self.create_test_csv(rows)
+        try:
+            raw_data, _ = SPrime.load(csv_file)
+            screening_data, _ = SPrime.process(raw_data)
+            profiles = sorted(screening_data.profiles, key=lambda p: p.cell_line.name)
+            assert len(profiles) == 2
+            ref_prof = next(p for p in profiles if p.cell_line.name == 'Reference')
+            test_prof = next(p for p in profiles if p.cell_line.name == 'Test')
+            assert ref_prof.metadata is not None and ref_prof.metadata.get('assay_timescale') == '24hr'
+            assert test_prof.metadata is not None and test_prof.metadata.get('assay_timescale') == '48hr'
+
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
+                export_file = Path(f.name)
+            screening_data.export_to_csv(export_file, include_metadata=True)
+            with open(export_file, 'r') as f:
+                reader = csv.DictReader(f)
+                exported = list(reader)
+            assert 'assay_timescale' in exported[0]
+            vals = {r['Cell_Line']: r['assay_timescale'] for r in exported}
+            assert vals['Reference'] == '24hr' and vals['Test'] == '48hr'
+            export_file.unlink()
+        finally:
+            csv_file.unlink()
+
+    def test_delta_s_prime_output_assay_timescale(self):
+        """Delta S' with headings_one_to_one_in_ref_and_test=['assay_timescale']; delta export includes assay_timescale."""
+        rows = [
+            {
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Reference',
+                'Concentration_Units': 'microM',
+                'assay_timescale': '24hr',
+                'Data0': '5',
+                'Data1': '10',
+                'Data2': '30',
+                'Data3': '70',
+                'Conc0': '0.1',
+                'Conc1': '1',
+                'Conc2': '10',
+                'Conc3': '100',
+            },
+            {
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Test',
+                'Concentration_Units': 'microM',
+                'assay_timescale': '48hr',
+                'Data0': '10',
+                'Data1': '20',
+                'Data2': '50',
+                'Data3': '90',
+                'Conc0': '0.1',
+                'Conc1': '1',
+                'Conc2': '10',
+                'Conc3': '100',
+            },
+        ]
+        csv_file = self.create_test_csv(rows)
+        try:
+            raw_data, _ = SPrime.load(csv_file)
+            screening_data, _ = SPrime.process(raw_data)
+            delta_results = screening_data.calculate_delta_s_prime(
+                reference_cell_lines='Reference',
+                test_cell_lines='Test',
+                headings_one_to_one_in_ref_and_test=['assay_timescale'],
+                source_profile='test',
+            )
+            assert 'Reference' in delta_results
+            assert len(delta_results['Reference']) == 1
+            comp = delta_results['Reference'][0]
+            assert 'assay_timescale' in comp
+            assert comp['assay_timescale'] == '48hr'
+
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as f:
+                export_file = Path(f.name)
+            ScreeningDataset.export_delta_s_prime_to_csv(
+                delta_results,
+                export_file,
+                headings_one_to_one_in_ref_and_test=['assay_timescale'],
+            )
+            with open(export_file, 'r') as f:
+                reader = csv.DictReader(f)
+                exported = list(reader)
+            assert len(exported) == 1
+            assert 'assay_timescale' in exported[0]
+            assert exported[0]['assay_timescale'] == '48hr'
+            export_file.unlink()
+        finally:
+            csv_file.unlink()
+
 
 class TestAllowOverwriteHillCoefficients:
     """Test allow_overwrite_hill_coefficients: raise when disallowed, succeed + warn when allowed."""
@@ -342,7 +517,7 @@ class TestAllowOverwriteHillCoefficients:
                 'AC50': '10.0',
                 'Upper': '100.0',
                 'Lower': '0.0',
-                'Hill': '1.5',
+                'Hill_Slope': '1.5',
                 'r2': '0.95',
             }
         ]
@@ -374,7 +549,7 @@ class TestAllowOverwriteHillCoefficients:
                 'AC50': '10.0',
                 'Upper': '100.0',
                 'Lower': '0.0',
-                'Hill': '1.5',
+                'Hill_Slope': '1.5',
                 'r2': '0.95',
             }
         ]

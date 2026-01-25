@@ -204,7 +204,7 @@ class TestRawDataset:
                 'AC50': '10.0',
                 'Upper': '100.0',
                 'Lower': '0.0',
-                'Hill': '1.5',
+                'Hill_Slope': '1.5',
                 'r2': '0.95',
             }
         ]
@@ -218,19 +218,24 @@ class TestRawDataset:
         finally:
             csv_file.unlink()
     
-    def test_forward_filling_compound_info(self):
+    def test_rows_literal_empty_is_null(self):
+        """Rows are taken literally; empty values are null, no forward-filling."""
         rows = [
             {
                 'Compound Name': 'Drug A',
                 'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
                 'Concentration_Units': 'microM',
+                'MOA': 'Inhibitor',
                 'Data0': '10',
                 'Conc0': '0.1',
             },
             {
-                'Cell_Line': 'Cell Line 2',  # No compound info, should forward-fill
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Cell Line 2',
                 'Concentration_Units': 'microM',
+                'MOA': '',  # Empty; not filled from row 1
                 'Data0': '20',
                 'Conc0': '0.1',
             }
@@ -240,8 +245,9 @@ class TestRawDataset:
             raw_data, report = RawDataset.load_from_file(csv_file)
             assert len(raw_data) == 2
             profiles = list(raw_data.profiles)
-            assert profiles[0].compound.name == 'Drug A'
-            assert profiles[1].compound.name == 'Drug A'  # Forward-filled
+            assert profiles[0].metadata is not None and profiles[0].metadata.get('MOA') == 'Inhibitor'
+            # Row 2 has empty MOA → null, not forward-filled
+            assert profiles[1].metadata is None or 'MOA' not in (profiles[1].metadata or {}) or profiles[1].metadata.get('MOA') in ('', None)
         finally:
             csv_file.unlink()
     
@@ -609,10 +615,12 @@ class TestUtilityFunctions:
         assert results["Ref"][0]["delta_s_prime"] == -0.5  # 2.5 - 3.0
     
     def test_convert_to_micromolar(self):
-        # Test various unit conversions
+        # Test various unit conversions (smallest to largest)
+        assert convert_to_micromolar([1.0], "fM") == [1e-9]
+        assert convert_to_micromolar([1.0], "pM") == [1e-6]
+        assert convert_to_micromolar([1.0], "nM") == [0.001]
         assert convert_to_micromolar([1.0], "microM") == [1.0]
         assert convert_to_micromolar([1.0], "mM") == [1000.0]
-        assert convert_to_micromolar([1.0], "nM") == [0.001]
         assert convert_to_micromolar([1.0], "M") == [1000000.0]
 
 
@@ -647,6 +655,55 @@ class TestEdgeCases:
         
         raw_data, report = RawDataset.load_from_file(csv_file)
         assert len(raw_data) == 1
+
+    def test_column_order_does_not_matter(self, tmp_path):
+        """Column order in CSV does not matter; matching is by heading name only."""
+        row = {
+            'Compound Name': 'Drug X',
+            'Compound_ID': 'DX',
+            'Cell_Line': 'CL1',
+            'Concentration_Units': 'microM',
+            'Data0': '5',
+            'Data1': '15',
+            'Data2': '40',
+            'Data3': '85',
+            'Conc0': '0.01',
+            'Conc1': '0.1',
+            'Conc2': '1',
+            'Conc3': '10',
+        }
+        order_a = ['Compound_ID', 'Cell_Line', 'Concentration_Units', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3', 'Compound Name']
+        order_b = ['Compound Name', 'Data3', 'Data2', 'Data1', 'Data0', 'Conc3', 'Conc2', 'Conc1', 'Conc0', 'Cell_Line', 'Concentration_Units', 'Compound_ID']
+
+        def write_csv(path, fieldnames):
+            with open(path, 'w', newline='') as f:
+                w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+                w.writeheader()
+                w.writerow(row)
+
+        path_a = tmp_path / "order_a.csv"
+        path_b = tmp_path / "order_b.csv"
+        write_csv(path_a, order_a)
+        write_csv(path_b, order_b)
+
+        raw_a, _ = RawDataset.load_from_file(path_a)
+        raw_b, _ = RawDataset.load_from_file(path_b)
+        assert len(raw_a) == 1 and len(raw_b) == 1
+        p_a = list(raw_a.profiles)[0]
+        p_b = list(raw_b.profiles)[0]
+        assert p_a.compound.drug_id == p_b.compound.drug_id == 'DX'
+        assert p_a.cell_line.name == p_b.cell_line.name == 'CL1'
+        assert p_a.compound.name == p_b.compound.name == 'Drug X'
+        assert p_a.concentrations == p_b.concentrations
+        assert p_a.responses == p_b.responses
+
+        from sprime import SPrime as sp
+        sa, _ = sp.process(raw_a)
+        sb, _ = sp.process(raw_b)
+        pa = list(sa.profiles)[0]
+        pb = list(sb.profiles)[0]
+        assert pa.s_prime is not None and pb.s_prime is not None
+        assert abs(pa.s_prime - pb.s_prime) < 1e-9
     
     def test_csv_scientific_notation(self, tmp_path):
         csv_file = tmp_path / "test.csv"

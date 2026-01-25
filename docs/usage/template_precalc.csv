@@ -1,2 +1,2 @@
-Compound Name,Compound_ID,Cell_Line,AC50,Upper,Lower,Hill,r2
-Example compound,DRUG001,MyCellLine,1.94e-8,85.8,-64.8,2.47,0.99
+Compound_ID,Cell_Line,AC50,Upper,Lower,Hill_Slope,r2,Compound Name
+DRUG001,MyCellLine,1.94e-8,85.8,-64.8,2.47,0.99,Example compound

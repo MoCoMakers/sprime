@@ -361,7 +361,7 @@ If parameters are NaN:
 
 The parameters above control **curve fitting** (e.g. `hill_fitting.fit_hill_curve`, or `**fit_params` passed to `sp.process`). A separate **processing** option affects when pre-calc Hill params are overwritten by fitted values:
 
-- **`allow_overwrite_hill_coefficients`**: When your CSV has **both** raw DATA/CONC **and** pre-calc (AC50, Upper, Lower, Hill, r2), sprime fits from raw and overwrites pre-calc. By default it **raises** unless you set `allow_overwrite_hill_coefficients=True`. When you allow overwrite, sprime **logs a warning** (console + report) each time pre-calc is overwritten.
+- **`allow_overwrite_hill_coefficients`**: When your CSV has **both** raw DATA/CONC **and** pre-calc (AC50, Upper, Lower, Hill_Slope, r2), sprime fits from raw and overwrites pre-calc. By default it **raises** unless you set `allow_overwrite_hill_coefficients=True`. When you allow overwrite, sprime **logs a warning** (console + report) each time pre-calc is overwritten.
 
 See [Basic Usage Guide](basic_usage_guide.md) § "Processing option: allow_overwrite_hill_coefficients" for details.
 

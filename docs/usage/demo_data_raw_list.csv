@@ -1,2 +1,2 @@
-Compound Name,Compound_ID,Cell_Line,Concentration_Units,Responses,Concentrations
-"Trifluoperazine hydrochloride","NCGC00013226-15","ipNF96.11C","microM","-63.23,-66.40,-67.04,-65.47,-63.59,-60.30,-47.43,46.75,69.12,97.97,85.27","1.30E-09,3.91E-09,1.17E-08,3.52E-08,1.06E-07,3.17E-07,9.50E-07,2.85E-06,8.55E-06,2.56E-05,7.69E-05"
+Compound_ID,Cell_Line,Concentration_Units,Responses,Concentrations,Compound Name
+"NCGC00013226-15","ipNF96.11C","microM","-63.23,-66.40,-67.04,-65.47,-63.59,-60.30,-47.43,46.75,69.12,97.97,85.27","1.30E-09,3.91E-09,1.17E-08,3.52E-08,1.06E-07,3.17E-07,9.50E-07,2.85E-06,8.55E-06,2.56E-05,7.69E-05","Trifluoperazine hydrochloride"

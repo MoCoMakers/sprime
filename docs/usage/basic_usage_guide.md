@@ -51,7 +51,7 @@ sprime expects CSV files with the following structure:
 
 ### Optional Columns
 
-- **pubchem_sid (substance id)**: PubChem substance identifier
+- **pubchem_sid**: PubChem substance identifier
 - **SMILES**: Chemical structure notation
 - **Cell_Line_Ref_ID**: Reference identifier for the cell line
 - **NCGCID**: Optional pass-through per compound (not used for validation)
@@ -81,7 +81,7 @@ For **list** format, use **Responses** and **Concentrations** (comma-separated v
 
 ### Supported concentration units
 
-When using raw data (Path A), `Concentration_Units` is required. All values are converted to **microM** internally. Supported conventions (case-insensitive): `microM`, `µM`, `um`, `microm`, `micro`; `nM`, `nanom`; `mM`, `millim`; `M`, `mol`; `pM`, `picom`.
+When using raw data (Path A), `Concentration_Units` is required. All values are converted to **microM** internally. Supported units (case-insensitive), smallest to largest: **fM** (`fm`, `femtom`); **pM** (`pm`, `picom`); **nM** (`nm`, `nanom`); **microM** (`µM`, `um`, `microm`, `micro`); **mM** (`mm`, `millim`); **M** (`m`, `mol`).
 
 ### Pre-calculated Parameters (Optional)
 
@@ -89,14 +89,14 @@ If you already have fitted Hill curve parameters:
 - **AC50** or **ec50**: Half-maximal concentration
 - **Upper** or **Infinity**: Upper asymptote
 - **Lower** or **Zero**: Lower asymptote
-- **Hill** or **slope**: Hill coefficient
+- **Hill_Slope** (or **Hill**, **slope**): Hill coefficient
 - **r2** or **R²**: R-squared goodness of fit
 
-### Forward-Filling
+### Rows are literal
 
-Compound information (Compound Name, Compound_ID, etc.) is automatically forward-filled. This means if you have multiple rows for the same compound (different cell lines), you only need to specify the compound information in the first row.
+Each row is taken as-is. Empty values are treated as null; there is no forward-filling from previous or subsequent rows. If a cell is empty (e.g. MOA), that field is null for that row. Provide explicit values in every row where you want them.
 
-**Template files:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) (raw columns), [template_raw_list.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw_list.csv) (raw list), [template_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_precalc.csv) (pre-calculated). Your CSV must use the same headers.
+**Template files:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) (raw columns), [template_raw_list.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw_list.csv) (raw list), [template_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_precalc.csv) (pre-calculated). Templates put required columns first. Your CSV must use the same header names; column order in the file does not matter.
 
 ## Loading Data
 
@@ -186,7 +186,7 @@ for profile in screening_data.profiles:
 
 ### Processing option: `allow_overwrite_hill_coefficients`
 
-When your CSV has **both** raw dose-response data (DATA*/CONC*) **and** pre-calculated Hill params (AC50, Upper, Lower, Hill, r2), sprime fits from raw and would overwrite those pre-calc values. By default it **raises** unless you explicitly allow overwriting:
+When your CSV has **both** raw dose-response data (DATA*/CONC*) **and** pre-calculated Hill params (AC50, Upper, Lower, Hill_Slope, r2), sprime fits from raw and would overwrite those pre-calc values. By default it **raises** unless you explicitly allow overwriting:
 
 ```python
 # CSV has both raw DATA/CONC and AC50/Upper/Lower columns – allow overwrite
@@ -304,7 +304,7 @@ delta_results = screening_data.calculate_delta_s_prime(
 for ref_cellline, comparisons in delta_results.items():
     print(f"\nReference: {ref_cellline}")
     for comp in comparisons:
-        print(f"  {comp['compound_name']}: ΔS' = {comp['delta_s_prime']:.2f}")
+        print(f"  {comp['compound_name']}: Delta S' = {comp['delta_s_prime']:.2f}")
 ```
 
 ### Multiple Reference and Test Cell Lines
@@ -360,7 +360,7 @@ for ref_cellline, comparisons in delta_results.items():
     
     print(f"\nRanking for {ref_cellline} vs tumor_line:")
     for rank, comp in enumerate(sorted_comps, start=1):
-        print(f"{rank}. {comp['compound_name']}: ΔS' = {comp['delta_s_prime']:.2f}")
+        print(f"{rank}. {comp['compound_name']}: Delta S' = {comp['delta_s_prime']:.2f}")
 ```
 
 ## Complete Example
@@ -403,7 +403,7 @@ for ref_cellline, comparisons in delta_results.items():
     print(f"\nRanking (most selective for tumor first):")
     for rank, comp in enumerate(sorted_comps, start=1):
         print(f"  {rank}. {comp['compound_name']}: "
-              f"ΔS' = {comp['delta_s_prime']:.2f} "
+              f"Delta S' = {comp['delta_s_prime']:.2f} "
               f"(S' ref={comp['s_prime_reference']:.2f}, "
               f"S' test={comp['s_prime_test']:.2f})")
 ```
@@ -423,7 +423,7 @@ delta_results = screening_data.calculate_delta_s_prime(...)
 ScreeningDataset.export_delta_s_prime_to_csv(delta_results, "delta_s_prime_table.csv")
 ```
 
-The `export_to_csv()` method includes all profile information including Hill curve parameters, S' values, ranking, and optional metadata (MOA, drug targets).
+The `export_to_csv()` method includes all profile information including Hill curve parameters, S' values, ranking, and optional metadata (any non-reserved columns from your CSV). Delta S' export adds reserved compound-level columns MOA and drug targets (resolved from common header variants) plus any optional headings you specify.
 
 ### Export to List of Dictionaries
 
@@ -482,7 +482,7 @@ delta_results = calculate_delta_s_prime(
 
 ### "Pre-calculated Hill parameters would be overwritten" Error
 
-Your CSV has **both** raw dose-response columns (Data0..DataN, Conc0..ConcN) **and** pre-calc Hill params (AC50, Upper, Lower, Hill, r2). By default sprime raises to avoid silently overwriting user-supplied values.
+Your CSV has **both** raw dose-response columns (Data0..DataN, Conc0..ConcN) **and** pre-calc Hill params (AC50, Upper, Lower, Hill_Slope, r2). By default sprime raises to avoid silently overwriting user-supplied values.
 
 **Fix:** Set `allow_overwrite_hill_coefficients=True` when you intend to refit from raw and overwrite pre-calc:
 
@@ -549,10 +549,11 @@ If CSV export fails:
 
 ### Metadata Not Appearing
 
-If metadata (MOA, drug targets) is not appearing in exports:
-- Ensure metadata columns exist in your CSV (MOA, drug targets, Target, etc.)
-- Check that `include_metadata=True` is set when calling `export_to_csv()`
-- Verify metadata was extracted during loading (check `profile.metadata`)
+If metadata is not appearing in exports:
+- Ensure non-reserved columns exist in your CSV (e.g. MOA, drug targets, Target, MoA); these are stored as generic metadata under the exact header.
+- Check that `include_metadata=True` is set when calling `export_to_csv()`.
+- For delta S' tables, MOA and drug targets are reserved compound-level columns and are resolved from common variants (MOA/MoA/moa, drug targets/Target/target) at export time.
+- Verify metadata was extracted during loading (check `profile.metadata`).
 
 ## Advanced Usage
 
@@ -610,6 +611,30 @@ sorted_profiles = sorted(
     key=lambda p: p.s_prime if p.s_prime else float('-inf'),
     reverse=True
 )
+```
+
+### Creating dose-response profiles from scratch
+
+You can create `DoseResponseProfile` objects programmatically (without loading from CSV), then fit and calculate S':
+
+```python
+from sprime import DoseResponseProfile, Compound, CellLine, Assay
+
+compound = Compound(name="Trifluoperazine", drug_id="NCGC00013226-15")
+cell_line = CellLine(name="ipNF96.11C")
+assay = Assay(name="HTS002", readout_type="activity")
+
+profile = DoseResponseProfile(
+    compound=compound,
+    cell_line=cell_line,
+    assay=assay,
+    concentrations=[1.30e-9, 3.91e-9, 1.17e-8, 3.52e-8, 1.06e-7, 3.17e-7, 9.50e-7, 2.85e-6, 8.55e-6, 2.56e-5, 7.69e-5],
+    responses=[-63.23, -66.40, -67.04, -65.47, -63.59, -60.30, -47.43, 46.75, 69.12, 97.97, 85.27],
+    concentration_units="microM"
+)
+
+s_prime = profile.fit_and_calculate_s_prime()
+print(f"S' = {s_prime:.2f}")
 ```
 
 ### Working with Pre-calculated Hill Parameters
@@ -706,7 +731,6 @@ DATA QUALITY ISSUES:
   Missing Compound Names:    5
   Insufficient Data Points:  8
   Invalid Numeric Values:    3
-  Forward-Filled Fields:     7
 
 WARNINGS: 25 total
   MISSING_DATA: 10
@@ -855,7 +879,6 @@ ReportingConfig.reset()
 **Warning Categories:**
 - `MISSING_DATA`: Missing required fields (Compound_ID, Cell_Line, insufficient data points)
 - `DATA_QUALITY`: Invalid values, non-numeric data, missing optional fields
-- `FORWARD_FILL`: Values forward-filled from previous row
 - `NUMERICAL`: NaN/Inf values encountered
 - `CURVE_FIT`: Fitting failures, poor fit quality (R² < 0.7)
 - `CALCULATION`: S' calculation failures

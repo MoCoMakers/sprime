@@ -18,7 +18,7 @@ Optional: --output-dir DIR  (for scenario 3 CSV exports; default: current direct
 
 import csv
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from sprime import SPrime as sp
 
@@ -80,7 +80,7 @@ def _run_scenario_precalc():
     raw, _ = sp.load(csv_path)
     print(f"    Loaded {len(raw)} profile(s)")
 
-    print("\n[2] Processing (use pre-calc params, compute S' if needed)...")
+    print("\n[2] Processing (use pre-calc params, always compute S')...")
     screening, _ = sp.process(raw)
     print("    Done.")
 
@@ -98,58 +98,79 @@ def _run_scenario_precalc():
     print("\n    Pre-calc workflow: no raw data, no curve fitting.")
 
 
-def _export_master_s_prime_table(screening_data, output_file: str):
-    """Export master S' table (all profiles)."""
+def _export_master_s_prime_table(screening_data, output_file: str, include_metadata: bool = True):
+    """Export master S' table (all profiles). Base + generic metadata, aligned with export_to_csv."""
     profiles = sorted(screening_data.profiles, key=lambda p: (p.compound.name, p.cell_line.name))
-    fieldnames = [
-        'Compound Name', 'Compound_ID', 'pubchem_sid (substance id)', 'SMILES',
+    base_fieldnames = [
+        'Compound Name', 'Compound_ID', 'pubchem_sid', 'SMILES',
         'Cell_Line', 'Cell_Line_Ref_ID',
-        'EC50', 'Upper', 'Lower', 'Hill', 'r2',
-        "S'", 'Rank', 'drug targets', 'MOA'
+        'EC50', 'Upper', 'Lower', 'Hill_Slope', 'r2',
+        "S'", 'Rank',
     ]
+    all_meta_keys = sorted(set(
+        k for p in profiles if p.metadata for k in p.metadata
+    ))
+    fieldnames = list(base_fieldnames)
+    if include_metadata and all_meta_keys:
+        fieldnames.extend(all_meta_keys)
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for profile in profiles:
+            meta = profile.metadata or {}
             row = {
                 'Compound Name': profile.compound.name,
                 'Compound_ID': profile.compound.drug_id,
-                'pubchem_sid (substance id)': profile.compound.pubchem_sid or '',
+                'pubchem_sid': profile.compound.pubchem_sid or '',
                 'SMILES': profile.compound.smiles or '',
                 'Cell_Line': profile.cell_line.name,
                 'Cell_Line_Ref_ID': profile.cell_line.ref_id or '',
                 'EC50': f"{profile.hill_params.ec50:.6e}" if profile.hill_params else '',
                 'Upper': f"{profile.hill_params.upper:.2f}" if profile.hill_params else '',
                 'Lower': f"{profile.hill_params.lower:.2f}" if profile.hill_params else '',
-                'Hill': f"{profile.hill_params.hill_coefficient:.4f}" if profile.hill_params and profile.hill_params.hill_coefficient else '',
+                'Hill_Slope': f"{profile.hill_params.hill_coefficient:.4f}" if profile.hill_params and profile.hill_params.hill_coefficient else '',
                 'r2': f"{profile.hill_params.r_squared:.4f}" if profile.hill_params and profile.hill_params.r_squared is not None else '',
                 "S'": f"{profile.s_prime:.4f}" if profile.s_prime else '',
                 'Rank': str(profile.rank) if profile.rank else '',
-                'drug targets': (profile.metadata or {}).get('drug targets', '') if profile.metadata else '',
-                'MOA': (profile.metadata or {}).get('MOA', '') if profile.metadata else ''
             }
+            if include_metadata and all_meta_keys:
+                for k in all_meta_keys:
+                    row[k] = meta.get(k, '')
             writer.writerow(row)
     print(f"    [OK] Master S' table: {output_file}")
 
 
-def _export_delta_s_prime_table(delta_results, output_file: str):
-    """Export delta S' comparison table."""
+def _export_delta_s_prime_table(
+    delta_results, output_file: str,
+    headings_one_to_one_in_ref_and_test: Optional[List[str]] = None,
+):
+    """Export delta S' comparison table. Includes compound-level MOA, drug targets + optional headings."""
+    extra = headings_one_to_one_in_ref_and_test or []
     flat = []
     for ref_cl, comparisons in delta_results.items():
         for c in comparisons:
-            flat.append({
+            row = {
                 'Compound Name': c.get('compound_name', ''),
                 'Compound_ID': c.get('drug_id', ''),
                 'Reference_Cell_Line': c.get('reference_cell_line', ''),
                 'Test_Cell_Line': c.get('test_cell_line', ''),
                 "S' (Reference)": f"{c.get('s_prime_ref', 0.0):.4f}",
                 "S' (Test)": f"{c.get('s_prime_test', 0.0):.4f}",
-                "Delta S'": f"{c.get('delta_s_prime', 0.0):.4f}"
-            })
+                "Delta S'": f"{c.get('delta_s_prime', 0.0):.4f}",
+                'MOA': c.get('MOA', ''),
+                'drug targets': c.get('drug targets', ''),
+            }
+            for h in extra:
+                row[h] = c.get(h, '')
+            flat.append(row)
     flat.sort(key=lambda x: float(x["Delta S'"]))
     for i, r in enumerate(flat, start=1):
         r['Rank'] = str(i)
-    fieldnames = ['Rank', 'Compound Name', 'Compound_ID', 'Reference_Cell_Line', 'Test_Cell_Line', "S' (Reference)", "S' (Test)", "Delta S'"]
+    fieldnames = [
+        'Rank', 'Compound Name', 'Compound_ID', 'Reference_Cell_Line', 'Test_Cell_Line',
+        "S' (Reference)", "S' (Test)", "Delta S'", 'MOA', 'drug targets',
+    ]
+    fieldnames.extend(extra)
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()

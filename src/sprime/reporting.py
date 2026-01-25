@@ -179,7 +179,7 @@ def print_processing_summary(report: ProcessingReport):
     
     if report.missing_drug_ids or report.missing_compound_names or \
        report.missing_cell_lines or report.insufficient_data_points or \
-       report.invalid_numeric_values or report.forward_filled_fields:
+       report.invalid_numeric_values:
         print("DATA QUALITY ISSUES:")
         if report.missing_drug_ids:
             print(f"  Missing Compound IDs:       {report.missing_drug_ids}")
@@ -191,8 +191,6 @@ def print_processing_summary(report: ProcessingReport):
             print(f"  Insufficient Data Points:   {report.insufficient_data_points}")
         if report.invalid_numeric_values:
             print(f"  Invalid Numeric Values:     {report.invalid_numeric_values}")
-        if report.forward_filled_fields:
-            print(f"  Forward-Filled Fields:      {report.forward_filled_fields}")
         print()
     
     if report.warnings:
@@ -243,7 +241,7 @@ def print_processing_summary_verbose(report: ProcessingReport):
     
     if report.missing_drug_ids or report.missing_compound_names or \
        report.missing_cell_lines or report.insufficient_data_points or \
-       report.invalid_numeric_values or report.forward_filled_fields:
+       report.invalid_numeric_values:
         print("DATA QUALITY ISSUES:")
         if report.missing_drug_ids:
             print(f"  Missing Compound IDs:       {report.missing_drug_ids}")
@@ -255,8 +253,6 @@ def print_processing_summary_verbose(report: ProcessingReport):
             print(f"  Insufficient Data Points:   {report.insufficient_data_points}")
         if report.invalid_numeric_values:
             print(f"  Invalid Numeric Values:     {report.invalid_numeric_values}")
-        if report.forward_filled_fields:
-            print(f"  Forward-Filled Fields:      {report.forward_filled_fields}")
         print()
     
     if report.warnings:
@@ -316,7 +312,7 @@ def write_processing_log(report: ProcessingReport, log_filepath: Union[str, Path
         # Data Quality Issues
         if report.missing_drug_ids or report.missing_compound_names or \
            report.missing_cell_lines or report.insufficient_data_points or \
-           report.invalid_numeric_values or report.forward_filled_fields:
+           report.invalid_numeric_values:
             f.write("DATA QUALITY ISSUES\n")
             f.write("-"*80 + "\n")
             if report.missing_drug_ids:
@@ -329,8 +325,6 @@ def write_processing_log(report: ProcessingReport, log_filepath: Union[str, Path
                 f.write(f"Insufficient Data Points:   {report.insufficient_data_points}\n")
             if report.invalid_numeric_values:
                 f.write(f"Invalid Numeric Values:     {report.invalid_numeric_values}\n")
-            if report.forward_filled_fields:
-                f.write(f"Forward-Filled Fields:      {report.forward_filled_fields}\n")
             f.write("\n")
         
         # Warnings by category
