@@ -87,7 +87,7 @@ A **compound** is generally a small molecule drug being investigated for therape
 
 **Common identifiers:**
 - Compound Name (e.g., "Trifluoperazine")
-- Drug ID (e.g., "NCGC00013226-15")
+- Compound_ID (e.g., "NCGC00013226-15")
 - NCGC ID - National Center for Advancing Translational Sciences (NCATS) identifier
 - Broad ID - Broad Institute identifier
 - PubChem SID - PubChem substance identifier
@@ -152,7 +152,7 @@ Each dose-response profile contains:
 
 Common fields across different data sources:
 
-- **Compound Information**: Name, Drug ID, NCGC ID, Broad ID, SMILES, PubChem SID
+- **Compound Information**: Name, Compound_ID, NCGCID (optional pass-through), SMILES, PubChem SID
 - **Cell Line Information**: Name (e.g., `ipNF96.11C`), Ref ID (e.g., `ACH-000007`, `depmap_id`)
 - **Biological Context**: Target(s), MoA (Mechanism of Action), Disease Area, Indication, Phase
 - **Quality Metrics**: R², AUC (Area under the curve), MAXR (Maximum response), Classification fields (CCLASS, CCLASS2)

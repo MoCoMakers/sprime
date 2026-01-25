@@ -37,8 +37,9 @@ class TestCompleteWorkflow:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Reference Cell Line',
+                'Concentration_Units': 'microM',
                 'Data0': '5',
                 'Data1': '10',
                 'Data2': '30',
@@ -52,6 +53,7 @@ class TestCompleteWorkflow:
             },
             {
                 'Cell_Line': 'Test Cell Line',  # Forward-fill compound info
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -114,8 +116,9 @@ class TestCompleteWorkflow:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -127,8 +130,9 @@ class TestCompleteWorkflow:
             },
             {
                 'Compound Name': 'Drug B',
-                'Drug ID': 'DRUG002',
+                'Compound_ID': 'DRUG002',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'Data0': '5',
                 'Data1': '15',
                 'Data2': '60',
@@ -166,7 +170,7 @@ class TestCompleteWorkflow:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
                 'AC50': '10.0',
                 'Upper': '100.0',
@@ -199,8 +203,9 @@ class TestCompleteWorkflow:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'MOA': 'Inhibitor',
                 'drug targets': 'Target1, Target2',
                 'Data0': '10',
@@ -246,8 +251,9 @@ class TestCompleteWorkflow:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Reference',
+                'Concentration_Units': 'microM',
                 'Data0': '5',
                 'Data1': '10',
                 'Data2': '30',
@@ -259,6 +265,7 @@ class TestCompleteWorkflow:
             },
             {
                 'Cell_Line': 'Test',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -321,8 +328,9 @@ class TestAllowOverwriteHillCoefficients:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -352,8 +360,9 @@ class TestAllowOverwriteHillCoefficients:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -392,12 +401,13 @@ class TestErrorHandling:
         """Test handling of profiles that fail curve fitting."""
         csv_file = tmp_path / "test.csv"
         with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Drug ID', 'Cell_Line', 'Data0', 'Conc0'])
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Data0', 'Conc0'])
             writer.writeheader()
             writer.writerow({
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Conc0': '0.1'
                 # Only 1 data point - will fail fitting
@@ -413,12 +423,13 @@ class TestErrorHandling:
         """Test delta S' calculation with missing cell line."""
         csv_file = tmp_path / "test.csv"
         with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Drug ID', 'Cell_Line', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
             writer.writeheader()
             writer.writerow({
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -442,6 +453,79 @@ class TestErrorHandling:
         assert "Cell1" in results
         assert len(results["Cell1"]) == 0
 
+    def test_raw_without_concentration_units_raises(self, tmp_path):
+        """Raw CSV with DATA/CONC but no Concentration_Units column raises ValueError."""
+        csv_file = tmp_path / "test.csv"
+        with open(csv_file, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
+            writer.writeheader()
+            writer.writerow({
+                'Compound Name': 'Test',
+                'Compound_ID': 'TEST',
+                'Cell_Line': 'Cell1',
+                'Data0': '10',
+                'Data1': '30',
+                'Data2': '70',
+                'Data3': '90',
+                'Conc0': '0.1',
+                'Conc1': '1',
+                'Conc2': '10',
+                'Conc3': '100',
+            })
+        with pytest.raises(ValueError, match="Required column 'Concentration_Units' not found"):
+            SPrime.load(csv_file)
+
+    def test_values_as_list_load_process(self):
+        """Load demo_data_raw_list with values_as='list', process, check S'."""
+        from pathlib import Path
+        csv_path = Path(__file__).resolve().parent.parent / "docs" / "usage" / "demo_data_raw_list.csv"
+        raw, _ = SPrime.load(csv_path, values_as="list")
+        assert len(raw) == 1
+        screening, _ = SPrime.process(raw)
+        assert len(screening) == 1
+        p = list(screening.profiles)[0]
+        assert p.s_prime is not None
+        assert p.hill_params is not None
+
+    def test_values_as_list_missing_responses_raises(self, tmp_path):
+        """CSV with Concentrations but no Responses, values_as='list' -> ValueError."""
+        csv_file = tmp_path / "test.csv"
+        with open(csv_file, 'w', newline='') as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Concentrations']
+            )
+            writer.writeheader()
+            writer.writerow({
+                'Compound Name': 'Test',
+                'Compound_ID': 'T',
+                'Cell_Line': 'C',
+                'Concentration_Units': 'microM',
+                'Concentrations': '1,2,3,4',
+            })
+        with pytest.raises(ValueError, match="No dose-response data"):
+            SPrime.load(csv_file, values_as="list")
+
+    def test_values_as_list_mismatched_lengths_raises(self, tmp_path):
+        """Responses and Concentrations length mismatch -> ValueError."""
+        csv_file = tmp_path / "test.csv"
+        with open(csv_file, 'w', newline='') as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Responses', 'Concentrations']
+            )
+            writer.writeheader()
+            writer.writerow({
+                'Compound Name': 'Test',
+                'Compound_ID': 'T',
+                'Cell_Line': 'C',
+                'Concentration_Units': 'microM',
+                'Responses': '1,2,3,4',
+                'Concentrations': '1,2,3',
+            })
+        with pytest.raises(ValueError, match="length mismatch"):
+            SPrime.load(csv_file, values_as="list")
+
 
 class TestGetSPrimesFromFile:
     """Test get_s_primes_from_file utility function."""
@@ -450,12 +534,13 @@ class TestGetSPrimesFromFile:
         """Test get_s_primes_from_file with complete data."""
         csv_file = tmp_path / "test.csv"
         with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Drug ID', 'Cell_Line', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
             writer.writeheader()
             writer.writerow({
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',

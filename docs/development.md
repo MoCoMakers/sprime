@@ -22,7 +22,7 @@ pytest tests/ --cov=src/sprime --cov-report=html   # with coverage
 
 ## API docs (`pdoc_html`)
 
-API docs live in `pdoc_html/` in the repo and are built from docstrings. The live [API Reference](https://mocomakers.github.io/sprime/) is deployed from CI (GitHub Pages).
+API docs live in `pdoc_html/` in the repo and are built from docstrings. The live [API Reference](https://mocomakers.github.io/sprime/) is deployed from CI (GitHub Pages). You need to do `pip install pdoc3`
 
 **Build locally:**
 
@@ -64,10 +64,3 @@ git push origin v0.1.0
 ## CI
 
 - **Deploy API docs:** `.github/workflows/deploy-api-docs.yml` runs on push to `main` or tags `v*`. It builds pdoc into `build/sprime`, uploads to GitHub Pages. The live API Reference is always the latest deploy. No versioned doc paths.
-
-## Ignored paths (`.gitignore`)
-
-- `venv/`, `__pycache__/`, `.pytest_cache/`
-- `build/`, `dist/`, `*.egg-info`, `htmlcov/`, `.coverage`
-- `src/sprime/_version.py`, `delta_s_prime_table.csv`, `master_s_prime_table.csv`
-- `docs/temp-docs-for-ai/`, `.cursor/`

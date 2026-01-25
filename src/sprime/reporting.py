@@ -79,7 +79,7 @@ class WarningEntry:
         """Format for log file."""
         context_parts = []
         if self.drug_id:
-            context_parts.append(f"Drug ID: {self.drug_id}")
+            context_parts.append(f"Compound_ID: {self.drug_id}")
         if self.compound_name:
             context_parts.append(f"Compound: {self.compound_name}")
         if self.cell_line:
@@ -182,7 +182,7 @@ def print_processing_summary(report: ProcessingReport):
        report.invalid_numeric_values or report.forward_filled_fields:
         print("DATA QUALITY ISSUES:")
         if report.missing_drug_ids:
-            print(f"  Missing Drug IDs:           {report.missing_drug_ids}")
+            print(f"  Missing Compound IDs:       {report.missing_drug_ids}")
         if report.missing_compound_names:
             print(f"  Missing Compound Names:     {report.missing_compound_names}")
         if report.missing_cell_lines:
@@ -246,7 +246,7 @@ def print_processing_summary_verbose(report: ProcessingReport):
        report.invalid_numeric_values or report.forward_filled_fields:
         print("DATA QUALITY ISSUES:")
         if report.missing_drug_ids:
-            print(f"  Missing Drug IDs:           {report.missing_drug_ids}")
+            print(f"  Missing Compound IDs:       {report.missing_drug_ids}")
         if report.missing_compound_names:
             print(f"  Missing Compound Names:     {report.missing_compound_names}")
         if report.missing_cell_lines:
@@ -320,7 +320,7 @@ def write_processing_log(report: ProcessingReport, log_filepath: Union[str, Path
             f.write("DATA QUALITY ISSUES\n")
             f.write("-"*80 + "\n")
             if report.missing_drug_ids:
-                f.write(f"Missing Drug IDs:            {report.missing_drug_ids}\n")
+                f.write(f"Missing Compound IDs:        {report.missing_drug_ids}\n")
             if report.missing_compound_names:
                 f.write(f"Missing Compound Names:      {report.missing_compound_names}\n")
             if report.missing_cell_lines:

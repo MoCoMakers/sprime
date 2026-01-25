@@ -172,8 +172,9 @@ class TestRawDataset:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -198,7 +199,7 @@ class TestRawDataset:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
                 'AC50': '10.0',
                 'Upper': '100.0',
@@ -221,13 +222,15 @@ class TestRawDataset:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Conc0': '0.1',
             },
             {
                 'Cell_Line': 'Cell Line 2',  # No compound info, should forward-fill
+                'Concentration_Units': 'microM',
                 'Data0': '20',
                 'Conc0': '0.1',
             }
@@ -246,8 +249,9 @@ class TestRawDataset:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'MOA': 'Inhibitor',
                 'drug targets': 'Target1, Target2',
                 'Data0': '10',
@@ -303,8 +307,9 @@ class TestRawDataset:
         rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -418,12 +423,13 @@ class TestSPrimeAPI:
     def test_load(self, tmp_path):
         csv_file = tmp_path / "test.csv"
         with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Drug ID', 'Cell_Line', 'Data0', 'Conc0'])
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Data0', 'Conc0'])
             writer.writeheader()
             writer.writerow({
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Conc0': '0.1'
             })
@@ -436,12 +442,13 @@ class TestSPrimeAPI:
     def test_process(self, tmp_path):
         csv_file = tmp_path / "test.csv"
         with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Drug ID', 'Cell_Line', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
             writer.writeheader()
             writer.writerow({
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -477,12 +484,13 @@ class TestUtilityFunctions:
     def test_get_s_primes_from_file(self, tmp_path):
         csv_file = tmp_path / "test.csv"
         with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Drug ID', 'Cell_Line', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Data0', 'Data1', 'Data2', 'Data3', 'Conc0', 'Conc1', 'Conc2', 'Conc3'])
             writer.writeheader()
             writer.writerow({
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -502,8 +510,9 @@ class TestUtilityFunctions:
         list_of_rows = [
             {
                 'Compound Name': 'Drug A',
-                'Drug ID': 'DRUG001',
+                'Compound_ID': 'DRUG001',
                 'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -518,6 +527,24 @@ class TestUtilityFunctions:
         assert isinstance(results, list)
         assert len(results) == 1
         assert "s_prime" in results[0]
+    
+    def test_get_s_prime_from_data_values_as_list(self):
+        """get_s_prime_from_data with values_as='list' and Responses/Concentrations."""
+        list_of_rows = [
+            {
+                'Compound Name': 'Drug A',
+                'Compound_ID': 'DRUG001',
+                'Cell_Line': 'Cell Line 1',
+                'Concentration_Units': 'microM',
+                'Responses': '10,20,50,90',
+                'Concentrations': '0.1,1,10,100',
+            }
+        ]
+        results = get_s_prime_from_data(list_of_rows, values_as="list")
+        assert isinstance(results, list)
+        assert len(results) == 1
+        assert "s_prime" in results[0]
+        assert results[0]["s_prime"] is not None
     
     def test_calculate_delta_s_prime_with_screening_dataset(self):
         # Create a simple screening dataset
@@ -607,12 +634,13 @@ class TestEdgeCases:
         # Test both Data0 and DATA0 formats
         csv_file = tmp_path / "test.csv"
         with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Drug ID', 'Cell_Line', 'DATA0', 'CONC0'])
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'DATA0', 'CONC0'])
             writer.writeheader()
             writer.writerow({
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'DATA0': '10',
                 'CONC0': '0.1'
             })
@@ -623,12 +651,13 @@ class TestEdgeCases:
     def test_csv_scientific_notation(self, tmp_path):
         csv_file = tmp_path / "test.csv"
         with open(csv_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Drug ID', 'Cell_Line', 'Data0', 'Conc0'])
+            writer = csv.DictWriter(f, fieldnames=['Compound Name', 'Compound_ID', 'Cell_Line', 'Concentration_Units', 'Data0', 'Conc0'])
             writer.writeheader()
             writer.writerow({
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Conc0': '1.30E-09'  # Scientific notation
             })

@@ -1,0 +1,2 @@
+Compound Name,Compound_ID,Cell_Line,Concentration_Units,Responses,Concentrations
+"Example compound","DRUG001","MyCellLine","microM","-65,-66,-67,-64,-62,-45","1e-9,3e-9,1e-8,3e-8,1e-7,3e-7"

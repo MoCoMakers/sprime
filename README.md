@@ -102,20 +102,46 @@ The basic workflow in sprime is: **Load** raw data from CSV → **Process** (fit
 
 | Path | Your data | Required columns | What sprime does |
 |------|-----------|------------------|------------------|
-| **A — Raw** | `CONC0`..N, `DATA0`..N (dose–response pairs) | `Cell_Line`, `Drug ID` or `NCGCID` | Fits Hill → EC50, Upper, Lower, Hill, r² → S' |
-| **B — Pre-calculated** | `AC50`, `Upper`, `Lower` (optional: Hill, r2, S') | `Cell_Line`, `Drug ID` or `NCGCID` | Uses params as-is, computes S' if needed |
+| **A — Raw (columns)** | `DATA0`..N, `CONC0`..N (one column per value) | `Cell_Line`, `Compound_ID`, `Concentration_Units` | Fits Hill → EC50, Upper, Lower, Hill, r² → S' |
+| **A — Raw (list)** | `Responses`, `Concentrations` (comma-separated in one cell each) | `Cell_Line`, `Compound_ID`, `Concentration_Units` | Same as above |
+| **B — Pre-calculated** | `AC50`, `Upper`, `Lower` (optional: Hill, r2, S') | `Cell_Line`, `Compound_ID` | Uses params as-is, computes S' if needed |
+
+Use **Path A (columns)** by default (`values_as="columns"`). Use **Path A (list)** with `sp.load(..., values_as="list")` when your data has `Responses` and `Concentrations` as comma-separated values. For list format, if the CSV is comma-delimited, quote those cells (e.g. `"4000,300,2"`).
 
 ### Path A — Raw data
 
-**Sample file:** [demo_data_delta.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv)  
-**Template:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) — match this format, or see [Required headings](#required-headings) below.
+**Templates:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) (columns), [template_raw_list.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw_list.csv) (list). See [Required headings](#required-headings) below.
+
+The **load** call changes with format; **process** does not. You must pass `values_as="columns"` (default) or `values_as="list"` — format is not auto-detected from headings.
+
+**Option 1 — Columns** (DATA0..N, CONC0..N)
 
 ```python
 from sprime import SPrime as sp
 
-# You can download the sample from the URL above, then load your local file.
-raw_data, _ = sp.load("demo_delta.csv")
+# Download (columns), then save locally:
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_s_prime.csv
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv
+
+raw_data, _ = sp.load("demo_data_s_prime.csv", values_as="columns")
 screening_data, _ = sp.process(raw_data)
+screening_data.export_to_csv("master_s_prime_table.csv")
+results = screening_data.to_dict_list()
+for profile in results:
+    print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
+```
+
+**Option 2 — List** (Responses, Concentrations as comma-separated per cell)
+
+```python
+from sprime import SPrime as sp
+
+# Download (list), then save locally:
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_raw_list.csv
+
+raw_data, _ = sp.load("demo_data_raw_list.csv", values_as="list")
+screening_data, _ = sp.process(raw_data)
+screening_data.export_to_csv("master_s_prime_table.csv")
 results = screening_data.to_dict_list()
 for profile in results:
     print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
@@ -129,9 +155,12 @@ for profile in results:
 ```python
 from sprime import SPrime as sp
 
-# You can download the sample from the URL above, then load your local file.
-raw_data, _ = sp.load("demo_precalc.csv")
+# Download, then save locally:
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_precalc.csv
+
+raw_data, _ = sp.load("demo_data_precalc.csv")
 screening_data, _ = sp.process(raw_data)
+screening_data.export_to_csv("master_s_prime_table.csv")
 results = screening_data.to_dict_list()
 for profile in results:
     print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
@@ -139,11 +168,15 @@ for profile in results:
 
 ### Required headings
 
-- **All paths:** `Cell_Line`; and either `Drug ID` or `NCGCID`.
-- **Path A (raw):** `DATA0`..`DATA N`, `CONC0`..`CONC N` (same N; exclude "Concentration Units").
+- **All paths:** `Cell_Line`; and `Compound_ID`. (`NCGCID` is optional pass-through per compound.)
+- **Path A (raw):** **`Concentration_Units`** (required). Either **(columns)** `DATA0`..`DATA N`, `CONC0`..`CONC N` (same N), or **(list)** `Responses` and `Concentrations` (comma-separated values in one cell each). Use `values_as="columns"` (default) or `values_as="list"`. See [Supported concentration units](#supported-concentration-units) below.
 - **Path B (pre-calc):** `AC50` (or `ec50`), `Upper` (or `Infinity`), `Lower` (or `Zero`). Optional: `Hill`, `r2`, `S'`.
 
 Template files list the exact headers; your CSV should match those.
+
+### Supported concentration units
+
+For Path A (raw), `Concentration_Units` must be present. All values are converted to **microM** internally. Supported conventions (case-insensitive): `microM`, `µM`, `um`, `microm`, `micro`; `nM`, `nanom`; `mM`, `millim`; `M`, `mol`; `pM`, `picom`.
 
 ### Next steps
 
@@ -154,34 +187,66 @@ Template files list the exact headers; your CSV should match those.
 
 ### Loading and Processing Screening Data
 
-Use your own CSV, or [download a sample](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv) (raw) / [demo_data_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_precalc.csv) (pre-calculated), then load the local file:
+Use your own CSV, or download a sample, then load the local file. The **load** call differs for columns vs list (`values_as`); **process** is the same. Use both CSV export and the print loop below.
+
+**Columns** (DATA0..N, CONC0..N):
 
 ```python
-from sprime import SPrime as sp
+from sprime import SPrime as sp, ScreeningDataset
 
-# You can download samples from the URLs above, then load your file.
-raw_data, _ = sp.load("your_data.csv")
+# Download (columns), then save locally:
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_s_prime.csv
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv
+
+raw_data, _ = sp.load("your_data.csv", values_as="columns")
 screening_data, _ = sp.process(raw_data)
+screening_data.export_to_csv("master_s_prime_table.csv")
 results = screening_data.to_dict_list()
 for profile in results:
     print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
 ```
 
-### Calculating Delta S'
-
-Compare drug responses between reference and test cell lines:
+**List** (Responses, Concentrations as comma-separated per cell):
 
 ```python
-# Calculate delta S' = S'(reference) - S'(test)
-delta_results = screening_data.calculate_delta_s_prime(
-    reference_cell_lines="ipnf05.5 mc",  # e.g., non-tumor tissue
-    test_cell_lines=["ipNF96.11C", "ipnf02.3"]  # e.g., tumor cell lines
-)
+from sprime import SPrime as sp, ScreeningDataset
 
-# Access results for each reference cell line
-for ref_cellline, comparisons in delta_results.items():
-    for comp in comparisons:
-        print(f"{comp['compound_name']}: ΔS' = {comp['delta_s_prime']:.2f}")
+# Download (list), then save locally:
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_raw_list.csv
+
+raw_data, _ = sp.load("your_data.csv", values_as="list")
+screening_data, _ = sp.process(raw_data)
+screening_data.export_to_csv("master_s_prime_table.csv")
+results = screening_data.to_dict_list()
+for profile in results:
+    print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
+```
+
+### Delta S' example
+
+Compare drug responses between reference and test cell lines (e.g. non-tumor vs tumor). Delta S' = S'(reference) − S'(test); more negative = more effective in test tissue.
+
+**Demo CSV (two cell lines):** [demo_data_delta.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv)
+
+```python
+from sprime import SPrime as sp, ScreeningDataset
+
+# Download, then save locally:
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv
+
+raw_data, _ = sp.load("demo_data_delta.csv", values_as="columns")
+screening_data, _ = sp.process(raw_data, allow_overwrite_hill_coefficients=True)
+screening_data.export_to_csv("master_s_prime_table.csv")
+
+delta_results = screening_data.calculate_delta_s_prime(
+    reference_cell_lines=["ipnf05.5 mc"],   # e.g. non-tumor; list supports multiple
+    test_cell_lines=["ipNF96.11C"]          # e.g. tumor; list supports multiple
+)
+ScreeningDataset.export_delta_s_prime_to_csv(delta_results, "delta_s_prime_table.csv")
+
+for ref_cl, comparisons in delta_results.items():
+    for c in comparisons:
+        print(f"{c['compound_name']}: ΔS' = {c['delta_s_prime']:.2f}")
 ```
 
 ### Working with Individual Profiles
@@ -190,7 +255,7 @@ for ref_cellline, comparisons in delta_results.items():
 from sprime import DoseResponseProfile, Compound, CellLine, Assay
 
 # Create a dose-response profile
-compound = Compound(name="Trifluoperazine", drug_id="NCGC00013226-15")
+compound = Compound(name="Trifluoperazine", drug_id="NCGC00013226-15")  # drug_id from Compound_ID column
 cell_line = CellLine(name="ipNF96.11C")
 assay = Assay(name="HTS002", readout_type="activity")
 

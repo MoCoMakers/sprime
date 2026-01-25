@@ -45,21 +45,43 @@ sprime expects CSV files with the following structure:
 ### Required Columns
 
 - **Compound Name**: Name of the compound/drug
-- **Drug ID**: Unique identifier for the compound (required)
+- **Compound_ID**: Unique identifier for the compound (required)
 - **Cell_Line**: Name of the cell line being tested
+- **Concentration_Units**: Required when using raw dose-response data (Path A). Units for concentration values (e.g. `microM`, `nM`). See [Supported concentration units](#supported-concentration-units) below.
 
 ### Optional Columns
 
 - **pubchem_sid (substance id)**: PubChem substance identifier
 - **SMILES**: Chemical structure notation
 - **Cell_Line_Ref_ID**: Reference identifier for the cell line
-- **Concentration Units (require microMol)**: Units for concentrations (defaults to microM)
+- **NCGCID**: Optional pass-through per compound (not used for validation)
+
+### Path A: columns vs list
+
+Raw data can be in two layouts. Use **columns** (default) or **list** via `values_as`:
+
+- **`values_as="columns"`** (default): One column per value — `Data0`..`DataN`, `Conc0`..`ConcN`.
+- **`values_as="list"`**: Two columns — `Responses` and `Concentrations`. Each cell holds comma-separated values (e.g. `"4000,300,2"`, `"10,3,0.1"`). Order must match; same length; ≥4 pairs. If your CSV is comma-delimited, quote those cells.
+
+```python
+raw_data, _ = sp.load("your_data.csv", values_as="columns")  # default
+# or
+raw_data, _ = sp.load("your_data_list_format.csv", values_as="list")
+```
+
+**Templates:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) (columns), [template_raw_list.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw_list.csv) (list).
 
 ### Dose-Response Data Columns
 
-For raw dose-response data, use columns named:
+For raw dose-response data (**columns** format), use columns named:
 - **Data0, Data1, Data2, ... DataN**: Response values at each concentration
 - **Conc0, Conc1, Conc2, ... ConcN**: Corresponding concentration values
+
+For **list** format, use **Responses** and **Concentrations** (comma-separated values in one cell each).
+
+### Supported concentration units
+
+When using raw data (Path A), `Concentration_Units` is required. All values are converted to **microM** internally. Supported conventions (case-insensitive): `microM`, `µM`, `um`, `microm`, `micro`; `nM`, `nanom`; `mM`, `millim`; `M`, `mol`; `pM`, `picom`.
 
 ### Pre-calculated Parameters (Optional)
 
@@ -72,9 +94,9 @@ If you already have fitted Hill curve parameters:
 
 ### Forward-Filling
 
-Compound information (Compound Name, Drug ID, etc.) is automatically forward-filled. This means if you have multiple rows for the same compound (different cell lines), you only need to specify the compound information in the first row.
+Compound information (Compound Name, Compound_ID, etc.) is automatically forward-filled. This means if you have multiple rows for the same compound (different cell lines), you only need to specify the compound information in the first row.
 
-**Template files:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) (raw), [template_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_precalc.csv) (pre-calculated). Your CSV must use the same headers.
+**Template files:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) (raw columns), [template_raw_list.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw_list.csv) (raw list), [template_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_precalc.csv) (pre-calculated). Your CSV must use the same headers.
 
 ## Loading Data
 
@@ -428,7 +450,7 @@ from sprime import get_s_prime_from_data, calculate_delta_s_prime
 list_of_rows = [
     {
         'Compound Name': 'Drug A',
-        'Drug ID': 'DRUG001',
+        'Compound_ID': 'DRUG001',
         'Cell_Line': 'Cell_Line_1',
         'Data0': '10', 'Data1': '20', 'Data2': '50', 'Data3': '90',
         'Conc0': '0.1', 'Conc1': '1', 'Conc2': '10', 'Conc3': '100',
@@ -688,7 +710,7 @@ DATA QUALITY ISSUES:
 
 WARNINGS: 25 total
   MISSING_DATA: 10
-    Row 12: Missing Drug ID, row skipped (CL:A549)
+    Row 12: Missing Compound_ID, row skipped (CL:A549)
     Row 23: Insufficient data points: 3 found (ID:DRUG004, CL:HeLa)
     ... and 8 more (see log file for details)
 ============================================================
@@ -831,7 +853,7 @@ ReportingConfig.reset()
 ### Understanding Warnings
 
 **Warning Categories:**
-- `MISSING_DATA`: Missing required fields (Drug ID, Cell_Line, insufficient data points)
+- `MISSING_DATA`: Missing required fields (Compound_ID, Cell_Line, insufficient data points)
 - `DATA_QUALITY`: Invalid values, non-numeric data, missing optional fields
 - `FORWARD_FILL`: Values forward-filled from previous row
 - `NUMERICAL`: NaN/Inf values encountered

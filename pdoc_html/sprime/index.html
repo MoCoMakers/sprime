@@ -328,7 +328,7 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
 </dl></div>
 </dd>
 <dt id="sprime.get_s_prime_from_data"><code class="name flex">
-<span>def <span class="ident">get_s_prime_from_data</span></span>(<span>list_of_rows: List[Dict],<br>allow_overwrite_hill_coefficients: bool = False,<br>**fit_params) ‑> List[Dict]</span>
+<span>def <span class="ident">get_s_prime_from_data</span></span>(<span>list_of_rows: List[Dict],<br>allow_overwrite_hill_coefficients: bool = False,<br>values_as: str = 'columns',<br>**fit_params) ‑> List[Dict]</span>
 </code></dt>
 <dd>
 <details class="source">
@@ -338,6 +338,7 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
 <pre><code class="python">def get_s_prime_from_data(
     list_of_rows: List[Dict],
     allow_overwrite_hill_coefficients: bool = False,
+    values_as: str = &#34;columns&#34;,
     **fit_params
 ) -&gt; List[Dict]:
     &#34;&#34;&#34;
@@ -352,6 +353,7 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
             Hill params (AC50, Upper, Lower, Hill, r2) with fitted values when
             both raw and pre-calc exist. Default False (raise). When True,
             overwrites are logged as warnings.
+        values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
         **fit_params: Parameters for curve fitting (e.g. maxfev, bounds).
         
     Returns:
@@ -366,7 +368,9 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
     # Validate required columns exist (check first row keys)
     first_row_keys = list(list_of_rows[0].keys()) if list_of_rows else []
     if first_row_keys:
-        _validate_required_columns(first_row_keys, source_name=&#34;in-memory data&#34;)
+        _validate_required_columns(
+            first_row_keys, source_name=&#34;in-memory data&#34;, values_as=values_as
+        )
     
     # Create report (row numbers will be 0 for in-memory data)
     if ProcessingReport is not None:
@@ -383,9 +387,9 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
     if report:
         report.total_rows = len(list_of_rows)
     
-    # Forward-fill compound info (including metadata)
+    # Forward-fill compound info (including metadata, NCGCID pass-through)
     compound_cols = [
-        &#39;Compound Name&#39;, &#39;Drug ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
+        &#39;Compound Name&#39;, &#39;Compound_ID&#39;, &#39;NCGCID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
         &#39;drug targets&#39;, &#39;MOA&#39;, &#39;Target&#39;, &#39;MoA&#39;, &#39;moa&#39;, &#39;target&#39;
     ]
     last_compound_values = {col: None for col in compound_cols}
@@ -434,21 +438,20 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
                     )
                     report.forward_filled_fields += 1
         
-        # Get compound info
+        # Get compound info (Compound_ID required; NCGCID pass-through only)
         compound_name = row.get(&#39;Compound Name&#39;, &#39;&#39;).strip() or &#39;Unknown&#39;
-        drug_id = row.get(&#39;Drug ID&#39;, &#39;&#39;).strip() or row.get(&#39;NCGCID&#39;, &#39;&#39;).strip()
+        compound_id = row.get(&#39;Compound_ID&#39;, &#39;&#39;).strip()
         
-        # Check for missing Drug ID - RAISE EXCEPTION
-        if not drug_id:
+        if not compound_id:
             raise ValueError(
-                f&#34;Row {row_idx + 1}: Missing required &#39;Drug ID&#39; or &#39;NCGCID&#39; value in in-memory data. &#34;
+                f&#34;Row {row_idx + 1}: Missing required &#39;Compound_ID&#39; value in in-memory data. &#34;
                 f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
-                f&#34;All rows must have a drug identifier.&#34;
+                f&#34;All rows must have a compound identifier.&#34;
             )
         
         # Track compound
-        if report and drug_id not in compounds_seen:
-            compounds_seen.add(drug_id)
+        if report and compound_id not in compounds_seen:
+            compounds_seen.add(compound_id)
             report.compounds_loaded += 1
         
         # Check for missing compound name
@@ -457,7 +460,7 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
                 row_number=0,
                 category=&#34;DATA_QUALITY&#34;,
                 message=&#34;Compound Name missing, using &#39;Unknown&#39;&#34;,
-                drug_id=drug_id,
+                drug_id=compound_id,
                 cell_line=cell_line_name,
                 field_name=&#34;Compound Name&#34;
             )
@@ -465,7 +468,7 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
         
         compound = Compound(
             name=compound_name,
-            drug_id=drug_id,
+            drug_id=compound_id,
             pubchem_sid=row.get(&#39;pubchem_sid (substance id)&#39;, &#39;&#39;).strip() or None,
             smiles=row.get(&#39;SMILES&#39;, &#39;&#39;).strip() or None
         )
@@ -477,39 +480,85 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
         )
         
         # Extract raw dose-response data (if present)
-        data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
-        conc_cols = [k for k in row.keys() 
-                    if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
-                    and &#39;Units&#39; not in k and &#39;units&#39; not in k]
-        
         concentrations = None
         responses = None
         
-        if data_cols and conc_cols:
-            # Sort columns to ensure correct order
-            data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-            conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-            
-            responses = []
-            concentrations = []
-            
-            for data_col, conc_col in zip(data_cols, conc_cols):
-                try:
-                    resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
-                    conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
-                    resp_val = resp_val.strip() if isinstance(resp_val, str) else &#39;&#39;
-                    conc_val = conc_val.strip() if isinstance(conc_val, str) else &#39;&#39;
-                    if resp_val and conc_val:
-                        responses.append(float(resp_val))
-                        conc_val_float = float(conc_val)
-                        concentrations.append(conc_val_float)
-                except (ValueError, TypeError):
-                    continue
-            
-            if concentrations and responses:
-                # Convert units to microM if needed
-                units = row.get(&#39;Concentration Units (require microMol)&#39;, &#39;&#39;).strip() or &#39;microM&#39;
-                concentrations = convert_to_micromolar(concentrations, units)
+        if values_as == &#34;list&#34;:
+            resp_key = next((k for k in row if k.lower() == &#39;responses&#39;), None)
+            conc_key = next((k for k in row if k.lower() == &#39;concentrations&#39;), None)
+            if resp_key and conc_key:
+                resp_str = (row.get(resp_key) or &#39;&#39;).strip()
+                conc_str = (row.get(conc_key) or &#39;&#39;).strip()
+                if resp_str and conc_str:
+                    responses = []
+                    conc_parts = []
+                    for part in resp_str.split(&#39;,&#39;):
+                        t = part.strip()
+                        if t:
+                            try:
+                                v = float(t)
+                                if not (math.isnan(v) or math.isinf(v)):
+                                    responses.append(v)
+                            except (ValueError, TypeError):
+                                pass
+                    for part in conc_str.split(&#39;,&#39;):
+                        t = part.strip()
+                        if t:
+                            try:
+                                v = float(t)
+                                if not (math.isnan(v) or math.isinf(v)):
+                                    conc_parts.append(v)
+                            except (ValueError, TypeError):
+                                pass
+                    if len(responses) == len(conc_parts) and len(responses) &gt;= 4:
+                        units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                        if not units:
+                            raise ValueError(
+                                f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in in-memory data. &#34;
+                                f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}.&#34;
+                            )
+                        concentrations = convert_to_micromolar(conc_parts, units)
+                    else:
+                        if len(responses) != len(conc_parts):
+                            raise ValueError(
+                                f&#34;Row {row_idx + 1}: Responses and Concentrations length mismatch &#34;
+                                f&#34;({len(responses)} vs {len(conc_parts)}) in in-memory data.&#34;
+                            )
+                        responses = None
+                        concentrations = None
+        
+        else:
+            data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
+            conc_cols = [k for k in row.keys() 
+                        if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
+                        and &#39;Units&#39; not in k and &#39;units&#39; not in k]
+            if data_cols and conc_cols:
+                data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                responses = []
+                concentrations = []
+                for data_col, conc_col in zip(data_cols, conc_cols):
+                    try:
+                        resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
+                        conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
+                        resp_val = resp_val.strip() if isinstance(resp_val, str) else &#39;&#39;
+                        conc_val = conc_val.strip() if isinstance(conc_val, str) else &#39;&#39;
+                        if resp_val and conc_val:
+                            responses.append(float(resp_val))
+                            concentrations.append(float(conc_val))
+                    except (ValueError, TypeError):
+                        continue
+                if concentrations and responses:
+                    units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                    if not units:
+                        raise ValueError(
+                            f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in in-memory data. &#34;
+                            f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}.&#34;
+                        )
+                    concentrations = convert_to_micromolar(concentrations, units)
+                else:
+                    concentrations = None
+                    responses = None
         
         # Extract pre-calculated Hill params (if present)
         hill_params = None
@@ -533,7 +582,7 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
         if not (has_raw_data or has_precalc_params):
             raise ValueError(
                 f&#34;Row {row_idx + 1}: No dose-response data found for compound &#39;{compound_name}&#39; &#34;
-                f&#34;(Drug ID: {drug_id}) in cell line &#39;{cell_line_name}&#39; in in-memory data. &#34;
+                f&#34;(Compound_ID: {compound_id}) in cell line &#39;{cell_line_name}&#39; in in-memory data. &#34;
                 f&#34;Row must have either: (1) raw data columns (DATA*/CONC*), or &#34;
                 f&#34;(2) pre-calculated parameters (AC50/Upper/Lower).&#34;
             )
@@ -602,6 +651,8 @@ Uses global reporting configuration for console/log output.</p>
 Hill params (AC50, Upper, Lower, Hill, r2) with fitted values when
 both raw and pre-calc exist. Default False (raise). When True,
 overwrites are logged as warnings.</dd>
+<dt><strong><code>values_as</code></strong></dt>
+<dd>"columns" (DATA<em>/CONC</em>) or "list" (Responses, Concentrations)</dd>
 <dt><strong><code>**fit_params</code></strong></dt>
 <dd>Parameters for curve fitting (e.g. maxfev, bounds).</dd>
 </dl>
@@ -614,7 +665,7 @@ overwrites are logged as warnings.</dd>
 </dl></div>
 </dd>
 <dt id="sprime.get_s_primes_from_file"><code class="name flex">
-<span>def <span class="ident">get_s_primes_from_file</span></span>(<span>filepath: str | pathlib.Path,<br>allow_overwrite_hill_coefficients: bool = False,<br>**fit_params) ‑> List[Dict]</span>
+<span>def <span class="ident">get_s_primes_from_file</span></span>(<span>filepath: str | pathlib.Path,<br>allow_overwrite_hill_coefficients: bool = False,<br>values_as: str = 'columns',<br>**fit_params) ‑> List[Dict]</span>
 </code></dt>
 <dd>
 <details class="source">
@@ -624,6 +675,7 @@ overwrites are logged as warnings.</dd>
 <pre><code class="python">def get_s_primes_from_file(
     filepath: Union[str, Path],
     allow_overwrite_hill_coefficients: bool = False,
+    values_as: str = &#34;columns&#34;,
     **fit_params
 ) -&gt; List[Dict]:
     &#34;&#34;&#34;
@@ -638,6 +690,7 @@ overwrites are logged as warnings.</dd>
             Hill params (AC50, Upper, Lower, Hill, r2) with fitted values when
             both raw and pre-calc exist. Default False (raise). When True,
             overwrites are logged as warnings.
+        values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
         **fit_params: Parameters for curve fitting (e.g. maxfev, bounds).
         
     Returns:
@@ -651,7 +704,9 @@ overwrites are logged as warnings.</dd>
         report = None
     
     # Load
-    raw_dataset, load_report = RawDataset.load_from_file(filepath, report=report)
+    raw_dataset, load_report = RawDataset.load_from_file(
+        filepath, report=report, values_as=values_as
+    )
     
     # Process (reuses same report)
     screening_dataset, process_report = raw_dataset.to_screening_dataset(
@@ -686,6 +741,8 @@ Uses global reporting configuration for console/log output.</p>
 Hill params (AC50, Upper, Lower, Hill, r2) with fitted values when
 both raw and pre-calc exist. Default False (raise). When True,
 overwrites are logged as warnings.</dd>
+<dt><strong><code>values_as</code></strong></dt>
+<dd>"columns" (DATA<em>/CONC</em>) or "list" (Responses, Concentrations)</dd>
 <dt><strong><code>**fit_params</code></strong></dt>
 <dd>Parameters for curve fitting (e.g. maxfev, bounds).</dd>
 </dl>
@@ -825,7 +882,7 @@ class Compound:
     
     Attributes:
         name: Compound name
-        drug_id: Unique drug identifier (e.g., NCGC ID, Broad ID)
+        drug_id: Unique compound identifier (from Compound_ID column)
         pubchem_sid: PubChem substance identifier (optional)
         smiles: SMILES notation of chemical structure (optional)
     &#34;&#34;&#34;
@@ -843,7 +900,7 @@ class Compound:
 <dt><strong><code>name</code></strong></dt>
 <dd>Compound name</dd>
 <dt><strong><code>drug_id</code></strong></dt>
-<dd>Unique drug identifier (e.g., NCGC ID, Broad ID)</dd>
+<dd>Unique compound identifier (from Compound_ID column)</dd>
 <dt><strong><code>pubchem_sid</code></strong></dt>
 <dd>PubChem substance identifier (optional)</dd>
 <dt><strong><code>smiles</code></strong></dt>
@@ -1585,6 +1642,7 @@ class ProcessingReport:
         filepath: Union[str, Path],
         assay_name: Optional[str] = None,
         report: Optional[&#39;ProcessingReport&#39;] = None,
+        values_as: str = &#34;columns&#34;,
         **csv_kwargs
     ) -&gt; Tuple[&#39;RawDataset&#39;, &#39;ProcessingReport&#39;]:
         &#34;&#34;&#34;
@@ -1592,7 +1650,7 @@ class ProcessingReport:
         
         Handles:
         - Forward-filling compound info
-        - Extracting raw data (Data0..DataN, Conc0..ConcN)
+        - Extracting raw data (Data0..DataN, Conc0..ConcN) or Responses/Concentrations
         - Loading pre-calculated params (AC50, Upper, Lower) if present
         - Creating DoseResponseProfile objects
         - Tracking data quality issues and warnings
@@ -1601,6 +1659,7 @@ class ProcessingReport:
             filepath: Path to CSV file
             assay_name: Name for assay (defaults to filename stem)
             report: Optional ProcessingReport to accumulate warnings (creates new if None)
+            values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
             **csv_kwargs: Additional arguments for csv.DictReader
             
         Returns:
@@ -1632,7 +1691,9 @@ class ProcessingReport:
         
         # Validate required columns exist in header
         if fieldnames:
-            _validate_required_columns(fieldnames, source_name=f&#34;CSV file &#39;{filepath}&#39;&#34;)
+            _validate_required_columns(
+                fieldnames, source_name=f&#34;CSV file &#39;{filepath}&#39;&#34;, values_as=values_as
+            )
         
         if report:
             report.total_rows = len(rows) + 1  # +1 for header
@@ -1643,9 +1704,9 @@ class ProcessingReport:
                 return raw_dataset, None
             return raw_dataset, report
         
-        # Forward-fill compound info (including metadata like MOA and drug targets)
+        # Forward-fill compound info (including metadata like MOA, drug targets, NCGCID pass-through)
         compound_cols = [
-            &#39;Compound Name&#39;, &#39;Drug ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
+            &#39;Compound Name&#39;, &#39;Compound_ID&#39;, &#39;NCGCID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
             &#39;drug targets&#39;, &#39;MOA&#39;, &#39;Target&#39;, &#39;MoA&#39;, &#39;moa&#39;, &#39;target&#39;
         ]
         last_compound_values = {col: None for col in compound_cols}
@@ -1695,21 +1756,20 @@ class ProcessingReport:
                         )
                         report.forward_filled_fields += 1
             
-            # Get compound info
+            # Get compound info (Compound_ID required; NCGCID is pass-through only)
             compound_name = row.get(&#39;Compound Name&#39;, &#39;&#39;).strip() or &#39;Unknown&#39;
-            drug_id = row.get(&#39;Drug ID&#39;, &#39;&#39;).strip() or row.get(&#39;NCGCID&#39;, &#39;&#39;).strip()
+            compound_id = row.get(&#39;Compound_ID&#39;, &#39;&#39;).strip()
             
-            # Check for missing Drug ID - RAISE EXCEPTION
-            if not drug_id:
+            if not compound_id:
                 raise ValueError(
-                    f&#34;Row {row_num}: Missing required &#39;Drug ID&#39; or &#39;NCGCID&#39; value. &#34;
+                    f&#34;Row {row_num}: Missing required &#39;Compound_ID&#39; value. &#34;
                     f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
-                    f&#34;All rows must have a drug identifier.&#34;
+                    f&#34;All rows must have a compound identifier.&#34;
                 )
             
             # Track compound
-            if report and drug_id not in compounds_seen:
-                compounds_seen.add(drug_id)
+            if report and compound_id not in compounds_seen:
+                compounds_seen.add(compound_id)
                 report.compounds_loaded += 1
             
             # Check for missing compound name
@@ -1718,7 +1778,7 @@ class ProcessingReport:
                     row_number=row_num,
                     category=&#34;DATA_QUALITY&#34;,
                     message=&#34;Compound Name missing, using &#39;Unknown&#39;&#34;,
-                    drug_id=drug_id,
+                    drug_id=compound_id,
                     cell_line=cell_line_name,
                     field_name=&#34;Compound Name&#34;
                 )
@@ -1726,7 +1786,7 @@ class ProcessingReport:
             
             compound = Compound(
                 name=compound_name,
-                drug_id=drug_id,
+                drug_id=compound_id,
                 pubchem_sid=row.get(&#39;pubchem_sid (substance id&#39;, &#39;&#39;).strip() or None,
                 smiles=row.get(&#39;SMILES&#39;, &#39;&#39;).strip() or None
             )
@@ -1738,95 +1798,202 @@ class ProcessingReport:
             )
             
             # Extract raw dose-response data (if present)
-            # Exclude &#34;Concentration Units&#34; column from concentration columns
-            data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
-            conc_cols = [k for k in row.keys() 
-                        if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
-                        and &#39;Units&#39; not in k and &#39;units&#39; not in k]
-            
             concentrations = None
             responses = None
             
-            if data_cols and conc_cols:
-                # Sort columns to ensure correct order
-                data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-                conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-                
-                responses = []
-                concentrations = []
-                
-                for data_col, conc_col in zip(data_cols, conc_cols):
-                    try:
-                        resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
-                        conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
-                        resp_val = resp_val.strip() if isinstance(resp_val, str) else &#39;&#39;
-                        conc_val = conc_val.strip() if isinstance(conc_val, str) else &#39;&#39;
-                        if resp_val and conc_val:
-                            resp_float = float(resp_val)
-                            conc_float = float(conc_val)
-                            
-                            # Check for invalid numeric values
-                            if report:
-                                if math.isnan(resp_float) or math.isinf(resp_float):
-                                    report.add_warning(
-                                        row_number=row_num,
-                                        category=&#34;NUMERICAL&#34;,
-                                        message=f&#34;Invalid numeric value (NaN/Inf) in {data_col}&#34;,
-                                        drug_id=drug_id,
-                                        compound_name=compound_name,
-                                        cell_line=cell_line_name,
-                                        field_name=data_col
-                                    )
-                                    report.invalid_numeric_values += 1
+            if values_as == &#34;list&#34;:
+                resp_key = next((k for k in row if k.lower() == &#39;responses&#39;), None)
+                conc_key = next((k for k in row if k.lower() == &#39;concentrations&#39;), None)
+                if resp_key and conc_key:
+                    resp_str = (row.get(resp_key) or &#39;&#39;).strip()
+                    conc_str = (row.get(conc_key) or &#39;&#39;).strip()
+                    if resp_str and conc_str:
+                        responses = []
+                        concentrations = []
+                        for part in resp_str.split(&#39;,&#39;):
+                            t = part.strip()
+                            if t:
+                                try:
+                                    v = float(t)
+                                    if report and (math.isnan(v) or math.isinf(v)):
+                                        report.add_warning(
+                                            row_number=row_num,
+                                            category=&#34;NUMERICAL&#34;,
+                                            message=f&#34;Invalid numeric value (NaN/Inf) in Responses&#34;,
+                                            drug_id=compound_id,
+                                            compound_name=compound_name,
+                                            cell_line=cell_line_name,
+                                            field_name=&#34;Responses&#34;,
+                                        )
+                                        report.invalid_numeric_values += 1
+                                        continue
+                                    responses.append(v)
+                                except (ValueError, TypeError) as e:
+                                    if report:
+                                        report.add_warning(
+                                            row_number=row_num,
+                                            category=&#34;DATA_QUALITY&#34;,
+                                            message=f&#34;Non-numeric value in Responses: {e}&#34;,
+                                            drug_id=compound_id,
+                                            compound_name=compound_name,
+                                            cell_line=cell_line_name,
+                                            field_name=&#34;Responses&#34;,
+                                        )
+                                        report.invalid_numeric_values += 1
                                     continue
-                                
-                                if math.isnan(conc_float) or math.isinf(conc_float):
-                                    report.add_warning(
-                                        row_number=row_num,
-                                        category=&#34;NUMERICAL&#34;,
-                                        message=f&#34;Invalid numeric value (NaN/Inf) in {conc_col}&#34;,
-                                        drug_id=drug_id,
-                                        compound_name=compound_name,
-                                        cell_line=cell_line_name,
-                                        field_name=conc_col
-                                    )
-                                    report.invalid_numeric_values += 1
+                        conc_parts = []
+                        for part in conc_str.split(&#39;,&#39;):
+                            t = part.strip()
+                            if t:
+                                try:
+                                    v = float(t)
+                                    if report and (math.isnan(v) or math.isinf(v)):
+                                        report.add_warning(
+                                            row_number=row_num,
+                                            category=&#34;NUMERICAL&#34;,
+                                            message=f&#34;Invalid numeric value (NaN/Inf) in Concentrations&#34;,
+                                            drug_id=compound_id,
+                                            compound_name=compound_name,
+                                            cell_line=cell_line_name,
+                                            field_name=&#34;Concentrations&#34;,
+                                        )
+                                        report.invalid_numeric_values += 1
+                                        continue
+                                    conc_parts.append(v)
+                                except (ValueError, TypeError) as e:
+                                    if report:
+                                        report.add_warning(
+                                            row_number=row_num,
+                                            category=&#34;DATA_QUALITY&#34;,
+                                            message=f&#34;Non-numeric value in Concentrations: {e}&#34;,
+                                            drug_id=compound_id,
+                                            compound_name=compound_name,
+                                            cell_line=cell_line_name,
+                                            field_name=&#34;Concentrations&#34;,
+                                        )
+                                        report.invalid_numeric_values += 1
                                     continue
-                            
-                            responses.append(resp_float)
-                            concentrations.append(conc_float)
-                    except (ValueError, TypeError) as e:
-                        if report:
-                            report.add_warning(
-                                row_number=row_num,
-                                category=&#34;DATA_QUALITY&#34;,
-                                message=f&#34;Non-numeric value in {data_col} or {conc_col}: {str(e)}&#34;,
-                                drug_id=drug_id,
-                                compound_name=compound_name,
-                                cell_line=cell_line_name,
-                                field_name=f&#34;{data_col}/{conc_col}&#34;
+                        if len(responses) != len(conc_parts):
+                            raise ValueError(
+                                f&#34;Row {row_num}: Responses and Concentrations length mismatch &#34;
+                                f&#34;({len(responses)} vs {len(conc_parts)}). &#34;
+                                f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}.&#34;
                             )
-                            report.invalid_numeric_values += 1
-                        continue
-                
-                # Check for sufficient data points
-                if report and len(responses) &lt; 4:
-                    report.add_warning(
-                        row_number=row_num,
-                        category=&#34;MISSING_DATA&#34;,
-                        message=f&#34;Insufficient data points: {len(responses)} found, need 4+ for curve fitting&#34;,
-                        drug_id=drug_id,
-                        compound_name=compound_name,
-                        cell_line=cell_line_name
-                    )
-                    report.insufficient_data_points += 1
-                
-                if concentrations and responses:
-                    # Convert units to microM if needed
-                    units = row.get(&#39;Concentration Units (require microMol)&#39;, &#39;&#39;).strip() or &#39;microM&#39;
-                    concentrations = convert_to_micromolar(concentrations, units)
-                    concentrations = concentrations if concentrations else None
-                    responses = responses if responses else None
+                        if len(responses) &lt; 4:
+                            if report:
+                                report.add_warning(
+                                    row_number=row_num,
+                                    category=&#34;MISSING_DATA&#34;,
+                                    message=f&#34;Insufficient data points: {len(responses)} found, need 4+ for curve fitting&#34;,
+                                    drug_id=compound_id,
+                                    compound_name=compound_name,
+                                    cell_line=cell_line_name,
+                                )
+                                report.insufficient_data_points += 1
+                            concentrations = None
+                            responses = None
+                        else:
+                            units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                            if not units:
+                                raise ValueError(
+                                    f&#34;Row {row_num}: Missing required &#39;Concentration_Units&#39; for raw data. &#34;
+                                    f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
+                                    f&#34;Raw dose-response data requires Concentration_Units.&#34;
+                                )
+                            concentrations = convert_to_micromolar(conc_parts, units)
+                            responses = responses
+            
+            elif True:
+                # Columns format: DATA*/CONC*
+                data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
+                conc_cols = [k for k in row.keys() 
+                            if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
+                            and &#39;Units&#39; not in k and &#39;units&#39; not in k]
+                if data_cols and conc_cols:
+                    # Sort columns to ensure correct order
+                    data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                    conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                    
+                    responses = []
+                    concentrations = []
+                    
+                    for data_col, conc_col in zip(data_cols, conc_cols):
+                        try:
+                            resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
+                            conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
+                            resp_val = resp_val.strip() if isinstance(resp_val, str) else &#39;&#39;
+                            conc_val = conc_val.strip() if isinstance(conc_val, str) else &#39;&#39;
+                            if resp_val and conc_val:
+                                resp_float = float(resp_val)
+                                conc_float = float(conc_val)
+                                
+                                # Check for invalid numeric values
+                                if report:
+                                    if math.isnan(resp_float) or math.isinf(resp_float):
+                                        report.add_warning(
+                                            row_number=row_num,
+                                            category=&#34;NUMERICAL&#34;,
+                                            message=f&#34;Invalid numeric value (NaN/Inf) in {data_col}&#34;,
+                                            drug_id=compound_id,
+                                            compound_name=compound_name,
+                                            cell_line=cell_line_name,
+                                            field_name=data_col
+                                        )
+                                        report.invalid_numeric_values += 1
+                                        continue
+                                    
+                                    if math.isnan(conc_float) or math.isinf(conc_float):
+                                        report.add_warning(
+                                            row_number=row_num,
+                                            category=&#34;NUMERICAL&#34;,
+                                            message=f&#34;Invalid numeric value (NaN/Inf) in {conc_col}&#34;,
+                                            drug_id=compound_id,
+                                            compound_name=compound_name,
+                                            cell_line=cell_line_name,
+                                            field_name=conc_col
+                                        )
+                                        report.invalid_numeric_values += 1
+                                        continue
+                                
+                                responses.append(resp_float)
+                                concentrations.append(conc_float)
+                        except (ValueError, TypeError) as e:
+                            if report:
+                                report.add_warning(
+                                    row_number=row_num,
+                                    category=&#34;DATA_QUALITY&#34;,
+                                    message=f&#34;Non-numeric value in {data_col} or {conc_col}: {str(e)}&#34;,
+                                    drug_id=compound_id,
+                                    compound_name=compound_name,
+                                    cell_line=cell_line_name,
+                                    field_name=f&#34;{data_col}/{conc_col}&#34;
+                                )
+                                report.invalid_numeric_values += 1
+                            continue
+                    
+                    # Check for sufficient data points
+                    if report and len(responses) &lt; 4:
+                        report.add_warning(
+                            row_number=row_num,
+                            category=&#34;MISSING_DATA&#34;,
+                            message=f&#34;Insufficient data points: {len(responses)} found, need 4+ for curve fitting&#34;,
+                            drug_id=compound_id,
+                            compound_name=compound_name,
+                            cell_line=cell_line_name
+                        )
+                        report.insufficient_data_points += 1
+                    
+                    if concentrations and responses:
+                        units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                        if not units:
+                            raise ValueError(
+                                f&#34;Row {row_num}: Missing required &#39;Concentration_Units&#39; for raw data. &#34;
+                                f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
+                                f&#34;Raw dose-response data requires Concentration_Units.&#34;
+                            )
+                        concentrations = convert_to_micromolar(concentrations, units)
+                        concentrations = concentrations if concentrations else None
+                        responses = responses if responses else None
             
             # Extract pre-calculated Hill params (if present)
             hill_params = None
@@ -1856,7 +2023,7 @@ class ProcessingReport:
             if not (has_raw_data or has_precalc_params):
                 raise ValueError(
                     f&#34;Row {row_num}: No dose-response data found for compound &#39;{compound_name}&#39; &#34;
-                    f&#34;(Drug ID: {drug_id}) in cell line &#39;{cell_line_name}&#39;. &#34;
+                    f&#34;(Compound_ID: {compound_id}) in cell line &#39;{cell_line_name}&#39;. &#34;
                     f&#34;Row must have either: (1) raw data columns (DATA*/CONC*), or &#34;
                     f&#34;(2) pre-calculated parameters (AC50/Upper/Lower).&#34;
                 )
@@ -1991,7 +2158,7 @@ class ProcessingReport:
                     raise ValueError(
                         f&#34;Pre-calculated Hill parameters (AC50, Upper, Lower, Hill, r2) would be &#34;
                         f&#34;overwritten by fitted values for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                        f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                        f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                         f&#34;&#39;{processed_profile.cell_line.name}&#39;. &#34;
                         f&#34;Set allow_overwrite_hill_coefficients=True to permit.&#34;
                     )
@@ -2001,7 +2168,7 @@ class ProcessingReport:
                 except (RuntimeError, ValueError) as e:
                     raise ValueError(
                         f&#34;Curve fitting failed for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                        f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                        f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                         f&#34;&#39;{processed_profile.cell_line.name}&#39;: {str(e)}&#34;
                     )
                 if had_precalc:
@@ -2024,7 +2191,7 @@ class ProcessingReport:
                 if processed_profile.hill_params is None:
                     raise ValueError(
                         f&#34;No data available to process for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                        f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                        f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                         f&#34;&#39;{processed_profile.cell_line.name}&#39;. Profile has neither raw data &#34;
                         f&#34;(concentrations/responses) nor pre-calculated Hill curve parameters.&#34;
                     )
@@ -2062,7 +2229,7 @@ class ProcessingReport:
                 except Exception as e:
                     raise ValueError(
                         f&#34;S&#39; calculation failed for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                        f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                        f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                         f&#34;&#39;{processed_profile.cell_line.name}&#39;: {str(e)}&#34;
                     )
             
@@ -2070,7 +2237,7 @@ class ProcessingReport:
             if processed_profile.s_prime is None:
                 raise ValueError(
                     f&#34;S&#39; calculation returned None for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                    f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                    f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                     f&#34;&#39;{processed_profile.cell_line.name}&#39;. This indicates invalid Hill curve parameters.&#34;
                 )
             
@@ -2083,7 +2250,7 @@ class ProcessingReport:
                 # Profile already exists or invalid - re-raise with context
                 raise ValueError(
                     f&#34;Cannot add profile for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                    f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                    f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                     f&#34;&#39;{processed_profile.cell_line.name}&#39;: {str(e)}&#34;
                 )
         
@@ -2113,13 +2280,13 @@ pre-calculated Hill params from CSV.</p>
 <h3>Static methods</h3>
 <dl>
 <dt id="sprime.RawDataset.load_from_file"><code class="name flex">
-<span>def <span class="ident">load_from_file</span></span>(<span>filepath: str | pathlib.Path,<br>assay_name: str | None = None,<br>report: ForwardRef('<a title="sprime.ProcessingReport" href="#sprime.ProcessingReport">ProcessingReport</a>') | None = None,<br>**csv_kwargs) ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a>]</span>
+<span>def <span class="ident">load_from_file</span></span>(<span>filepath: str | pathlib.Path,<br>assay_name: str | None = None,<br>report: ForwardRef('<a title="sprime.ProcessingReport" href="#sprime.ProcessingReport">ProcessingReport</a>') | None = None,<br>values_as: str = 'columns',<br>**csv_kwargs) ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a>]</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Load CSV file and create RawDataset with quality reporting.</p>
 <p>Handles:
 - Forward-filling compound info
-- Extracting raw data (Data0..DataN, Conc0..ConcN)
+- Extracting raw data (Data0..DataN, Conc0..ConcN) or Responses/Concentrations
 - Loading pre-calculated params (AC50, Upper, Lower) if present
 - Creating DoseResponseProfile objects
 - Tracking data quality issues and warnings</p>
@@ -2131,6 +2298,8 @@ pre-calculated Hill params from CSV.</p>
 <dd>Name for assay (defaults to filename stem)</dd>
 <dt><strong><code>report</code></strong></dt>
 <dd>Optional ProcessingReport to accumulate warnings (creates new if None)</dd>
+<dt><strong><code>values_as</code></strong></dt>
+<dd>"columns" (DATA<em>/CONC</em>) or "list" (Responses, Concentrations)</dd>
 <dt><strong><code>**csv_kwargs</code></strong></dt>
 <dd>Additional arguments for csv.DictReader</dd>
 </dl>
@@ -2300,7 +2469,7 @@ def profiles(self):
                 raise ValueError(
                     f&#34;Pre-calculated Hill parameters (AC50, Upper, Lower, Hill, r2) would be &#34;
                     f&#34;overwritten by fitted values for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                    f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                    f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                     f&#34;&#39;{processed_profile.cell_line.name}&#39;. &#34;
                     f&#34;Set allow_overwrite_hill_coefficients=True to permit.&#34;
                 )
@@ -2310,7 +2479,7 @@ def profiles(self):
             except (RuntimeError, ValueError) as e:
                 raise ValueError(
                     f&#34;Curve fitting failed for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                    f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                    f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                     f&#34;&#39;{processed_profile.cell_line.name}&#39;: {str(e)}&#34;
                 )
             if had_precalc:
@@ -2333,7 +2502,7 @@ def profiles(self):
             if processed_profile.hill_params is None:
                 raise ValueError(
                     f&#34;No data available to process for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                    f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                    f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                     f&#34;&#39;{processed_profile.cell_line.name}&#39;. Profile has neither raw data &#34;
                     f&#34;(concentrations/responses) nor pre-calculated Hill curve parameters.&#34;
                 )
@@ -2371,7 +2540,7 @@ def profiles(self):
             except Exception as e:
                 raise ValueError(
                     f&#34;S&#39; calculation failed for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                    f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                    f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                     f&#34;&#39;{processed_profile.cell_line.name}&#39;: {str(e)}&#34;
                 )
         
@@ -2379,7 +2548,7 @@ def profiles(self):
         if processed_profile.s_prime is None:
             raise ValueError(
                 f&#34;S&#39; calculation returned None for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                 f&#34;&#39;{processed_profile.cell_line.name}&#39;. This indicates invalid Hill curve parameters.&#34;
             )
         
@@ -2392,7 +2561,7 @@ def profiles(self):
             # Profile already exists or invalid - re-raise with context
             raise ValueError(
                 f&#34;Cannot add profile for compound &#39;{processed_profile.compound.name}&#39; &#34;
-                f&#34;(Drug ID: {processed_profile.compound.drug_id}) in cell line &#34;
+                f&#34;(Compound_ID: {processed_profile.compound.drug_id}) in cell line &#34;
                 f&#34;&#39;{processed_profile.cell_line.name}&#39;: {str(e)}&#34;
             )
     
@@ -2541,7 +2710,12 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
     &#34;&#34;&#34;
     
     @staticmethod
-    def load(filepath: Union[str, Path], assay_name: Optional[str] = None, **csv_kwargs) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
+    def load(
+        filepath: Union[str, Path],
+        assay_name: Optional[str] = None,
+        values_as: str = &#34;columns&#34;,
+        **csv_kwargs
+    ) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
         &#34;&#34;&#34;
         Load raw data from CSV file or pandas DataFrame with quality reporting.
         
@@ -2551,6 +2725,7 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
         Args:
             filepath: Path to CSV file, or pandas DataFrame
             assay_name: Name for assay (defaults to filename stem or &#39;DataFrame&#39;)
+            values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
             **csv_kwargs: Additional arguments for csv.DictReader (ignored for DataFrames)
             
         Returns:
@@ -2564,14 +2739,16 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
         try:
             import pandas as pd
             if isinstance(filepath, pd.DataFrame):
-                return SPrime.load_from_dataframe(filepath, assay_name)
+                return SPrime.load_from_dataframe(filepath, assay_name, values_as=values_as)
         except ImportError:
             pass  # pandas not available, treat as file path
         except (AttributeError, TypeError):
             pass  # Not a DataFrame, treat as file path
         
         # Treat as file path
-        raw_dataset, report = RawDataset.load_from_file(filepath, assay_name, **csv_kwargs)
+        raw_dataset, report = RawDataset.load_from_file(
+            filepath, assay_name, values_as=values_as, **csv_kwargs
+        )
         
         # Auto-print and write log based on global config
         if report and ReportingConfig is not None:
@@ -2581,13 +2758,18 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
         return raw_dataset, report
     
     @staticmethod
-    def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
+    def load_from_dataframe(
+        df,
+        assay_name: Optional[str] = None,
+        values_as: str = &#34;columns&#34;,
+    ) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
         &#34;&#34;&#34;
         Load raw data from pandas DataFrame with quality reporting.
         
         Args:
             df: pandas DataFrame with columns matching CSV format
             assay_name: Name for assay (defaults to &#39;DataFrame&#39;)
+            values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
             
         Returns:
             Tuple of (RawDataset, ProcessingReport)
@@ -2616,7 +2798,9 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
         # Validate required columns exist
         first_row_keys = list(list_of_rows[0].keys()) if list_of_rows else []
         if first_row_keys:
-            _validate_required_columns(first_row_keys, source_name=&#34;DataFrame&#34;)
+            _validate_required_columns(
+                first_row_keys, source_name=&#34;DataFrame&#34;, values_as=values_as
+            )
         
         # Create report
         if ProcessingReport is not None:
@@ -2635,7 +2819,7 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
         
         # Process rows (similar to get_s_prime_from_data but add to RawDataset)
         compound_cols = [
-            &#39;Compound Name&#39;, &#39;Drug ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
+            &#39;Compound Name&#39;, &#39;Compound_ID&#39;, &#39;NCGCID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
             &#39;drug targets&#39;, &#39;MOA&#39;, &#39;Target&#39;, &#39;MoA&#39;, &#39;moa&#39;, &#39;target&#39;
         ]
         last_compound_values = {col: None for col in compound_cols}
@@ -2681,27 +2865,26 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
                         )
                         report.forward_filled_fields += 1
             
-            # Get compound info
+            # Get compound info (Compound_ID required; NCGCID pass-through only)
             compound_name = row.get(&#39;Compound Name&#39;, &#39;&#39;).strip() or &#39;Unknown&#39;
-            drug_id = row.get(&#39;Drug ID&#39;, &#39;&#39;).strip() or row.get(&#39;NCGCID&#39;, &#39;&#39;).strip()
+            compound_id = row.get(&#39;Compound_ID&#39;, &#39;&#39;).strip()
             
-            # Check for missing Drug ID - RAISE EXCEPTION
-            if not drug_id:
+            if not compound_id:
                 raise ValueError(
-                    f&#34;Row {row_idx + 1}: Missing required &#39;Drug ID&#39; or &#39;NCGCID&#39; value in DataFrame. &#34;
+                    f&#34;Row {row_idx + 1}: Missing required &#39;Compound_ID&#39; value in DataFrame. &#34;
                     f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
-                    f&#34;All rows must have a drug identifier.&#34;
+                    f&#34;All rows must have a compound identifier.&#34;
                 )
             
             # Track compound
-            if report and drug_id not in compounds_seen:
-                compounds_seen.add(drug_id)
+            if report and compound_id not in compounds_seen:
+                compounds_seen.add(compound_id)
                 report.compounds_loaded += 1
             
             # Create compound and cell line objects
             compound = Compound(
                 name=compound_name,
-                drug_id=drug_id,
+                drug_id=compound_id,
                 pubchem_sid=row.get(&#39;pubchem_sid (substance id)&#39;, &#39;&#39;).strip() or None,
                 smiles=row.get(&#39;SMILES&#39;, &#39;&#39;).strip() or None
             )
@@ -2712,36 +2895,86 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
             )
             
             # Extract raw dose-response data (if present)
-            data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
-            conc_cols = [k for k in row.keys() 
-                        if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
-                        and &#39;Units&#39; not in k and &#39;units&#39; not in k]
-            
             concentrations = None
             responses = None
             
-            if data_cols and conc_cols:
-                data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-                conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-                
-                responses = []
-                concentrations = []
-                
-                for data_col, conc_col in zip(data_cols, conc_cols):
-                    try:
-                        resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
-                        conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
-                        resp_val = resp_val.strip() if isinstance(resp_val, str) else str(resp_val)
-                        conc_val = conc_val.strip() if isinstance(conc_val, str) else str(conc_val)
-                        if resp_val and conc_val:
-                            responses.append(float(resp_val))
-                            concentrations.append(float(conc_val))
-                    except (ValueError, TypeError):
-                        continue
-                
-                if concentrations and responses:
-                    units = row.get(&#39;Concentration Units (require microMol)&#39;, &#39;&#39;).strip() or &#39;microM&#39;
-                    concentrations = convert_to_micromolar(concentrations, units)
+            if values_as == &#34;list&#34;:
+                resp_key = next((k for k in row if k.lower() == &#39;responses&#39;), None)
+                conc_key = next((k for k in row if k.lower() == &#39;concentrations&#39;), None)
+                if resp_key and conc_key:
+                    resp_str = (row.get(resp_key) or &#39;&#39;).strip()
+                    conc_str = (row.get(conc_key) or &#39;&#39;).strip()
+                    if resp_str and conc_str:
+                        responses = []
+                        conc_parts = []
+                        for part in resp_str.split(&#39;,&#39;):
+                            t = part.strip()
+                            if t:
+                                try:
+                                    v = float(t)
+                                    if not (math.isnan(v) or math.isinf(v)):
+                                        responses.append(v)
+                                except (ValueError, TypeError):
+                                    pass
+                        for part in conc_str.split(&#39;,&#39;):
+                            t = part.strip()
+                            if t:
+                                try:
+                                    v = float(t)
+                                    if not (math.isnan(v) or math.isinf(v)):
+                                        conc_parts.append(v)
+                                except (ValueError, TypeError):
+                                    pass
+                        if len(responses) == len(conc_parts) and len(responses) &gt;= 4:
+                            units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                            if not units:
+                                raise ValueError(
+                                    f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in DataFrame. &#34;
+                                    f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}.&#34;
+                                )
+                            concentrations = convert_to_micromolar(conc_parts, units)
+                        else:
+                            if len(responses) != len(conc_parts):
+                                raise ValueError(
+                                    f&#34;Row {row_idx + 1}: Responses and Concentrations length mismatch &#34;
+                                    f&#34;({len(responses)} vs {len(conc_parts)}) in DataFrame.&#34;
+                                )
+                            responses = None
+                            concentrations = None
+            
+            else:
+                data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
+                conc_cols = [k for k in row.keys() 
+                            if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
+                            and &#39;Units&#39; not in k and &#39;units&#39; not in k]
+                if data_cols and conc_cols:
+                    data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                    conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                    responses = []
+                    concentrations = []
+                    for data_col, conc_col in zip(data_cols, conc_cols):
+                        try:
+                            resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
+                            conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
+                            resp_val = resp_val.strip() if isinstance(resp_val, str) else str(resp_val)
+                            conc_val = conc_val.strip() if isinstance(conc_val, str) else str(conc_val)
+                            if resp_val and conc_val:
+                                responses.append(float(resp_val))
+                                concentrations.append(float(conc_val))
+                        except (ValueError, TypeError):
+                            continue
+                    if concentrations and responses:
+                        units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                        if not units:
+                            raise ValueError(
+                                f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in DataFrame. &#34;
+                                f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
+                                f&#34;Raw dose-response data requires Concentration_Units.&#34;
+                            )
+                        concentrations = convert_to_micromolar(concentrations, units)
+                    else:
+                        concentrations = None
+                        responses = None
             
             # Extract pre-calculated Hill params (if present)
             hill_params = None
@@ -2765,7 +2998,7 @@ pre-calc Hill coefficients without allow_overwrite_hill_coefficients.</dd>
             if not (has_raw_data or has_precalc_params):
                 raise ValueError(
                     f&#34;Row {row_idx + 1}: No dose-response data found for compound &#39;{compound_name}&#39; &#34;
-                    f&#34;(Drug ID: {drug_id}) in cell line &#39;{cell_line_name}&#39; in DataFrame. &#34;
+                    f&#34;(Compound_ID: {compound_id}) in cell line &#39;{cell_line_name}&#39; in DataFrame. &#34;
                     f&#34;Row must have either: (1) raw data columns (DATA*/CONC*), or &#34;
                     f&#34;(2) pre-calculated parameters (AC50/Upper/Lower).&#34;
                 )
@@ -2851,7 +3084,7 @@ processing dose-response profiles, and calculating S' values.</p></div>
 <h3>Static methods</h3>
 <dl>
 <dt id="sprime.SPrime.load"><code class="name flex">
-<span>def <span class="ident">load</span></span>(<span>filepath: str | pathlib.Path, assay_name: str | None = None, **csv_kwargs) ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a> | None]</span>
+<span>def <span class="ident">load</span></span>(<span>filepath: str | pathlib.Path,<br>assay_name: str | None = None,<br>values_as: str = 'columns',<br>**csv_kwargs) ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a> | None]</span>
 </code></dt>
 <dd>
 <details class="source">
@@ -2859,7 +3092,12 @@ processing dose-response profiles, and calculating S' values.</p></div>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@staticmethod
-def load(filepath: Union[str, Path], assay_name: Optional[str] = None, **csv_kwargs) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
+def load(
+    filepath: Union[str, Path],
+    assay_name: Optional[str] = None,
+    values_as: str = &#34;columns&#34;,
+    **csv_kwargs
+) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
     &#34;&#34;&#34;
     Load raw data from CSV file or pandas DataFrame with quality reporting.
     
@@ -2869,6 +3107,7 @@ def load(filepath: Union[str, Path], assay_name: Optional[str] = None, **csv_kwa
     Args:
         filepath: Path to CSV file, or pandas DataFrame
         assay_name: Name for assay (defaults to filename stem or &#39;DataFrame&#39;)
+        values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
         **csv_kwargs: Additional arguments for csv.DictReader (ignored for DataFrames)
         
     Returns:
@@ -2882,14 +3121,16 @@ def load(filepath: Union[str, Path], assay_name: Optional[str] = None, **csv_kwa
     try:
         import pandas as pd
         if isinstance(filepath, pd.DataFrame):
-            return SPrime.load_from_dataframe(filepath, assay_name)
+            return SPrime.load_from_dataframe(filepath, assay_name, values_as=values_as)
     except ImportError:
         pass  # pandas not available, treat as file path
     except (AttributeError, TypeError):
         pass  # Not a DataFrame, treat as file path
     
     # Treat as file path
-    raw_dataset, report = RawDataset.load_from_file(filepath, assay_name, **csv_kwargs)
+    raw_dataset, report = RawDataset.load_from_file(
+        filepath, assay_name, values_as=values_as, **csv_kwargs
+    )
     
     # Auto-print and write log based on global config
     if report and ReportingConfig is not None:
@@ -2907,6 +3148,8 @@ uses global reporting configuration for console/log output.</p>
 <dd>Path to CSV file, or pandas DataFrame</dd>
 <dt><strong><code>assay_name</code></strong></dt>
 <dd>Name for assay (defaults to filename stem or 'DataFrame')</dd>
+<dt><strong><code>values_as</code></strong></dt>
+<dd>"columns" (DATA<em>/CONC</em>) or "list" (Responses, Concentrations)</dd>
 <dt><strong><code>**csv_kwargs</code></strong></dt>
 <dd>Additional arguments for csv.DictReader (ignored for DataFrames)</dd>
 </dl>
@@ -2921,7 +3164,7 @@ uses global reporting configuration for console/log output.</p>
 </dl></div>
 </dd>
 <dt id="sprime.SPrime.load_from_dataframe"><code class="name flex">
-<span>def <span class="ident">load_from_dataframe</span></span>(<span>df, assay_name: str | None = None) ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a> | None]</span>
+<span>def <span class="ident">load_from_dataframe</span></span>(<span>df, assay_name: str | None = None, values_as: str = 'columns') ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a> | None]</span>
 </code></dt>
 <dd>
 <details class="source">
@@ -2929,13 +3172,18 @@ uses global reporting configuration for console/log output.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@staticmethod
-def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
+def load_from_dataframe(
+    df,
+    assay_name: Optional[str] = None,
+    values_as: str = &#34;columns&#34;,
+) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
     &#34;&#34;&#34;
     Load raw data from pandas DataFrame with quality reporting.
     
     Args:
         df: pandas DataFrame with columns matching CSV format
         assay_name: Name for assay (defaults to &#39;DataFrame&#39;)
+        values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
         
     Returns:
         Tuple of (RawDataset, ProcessingReport)
@@ -2964,7 +3212,9 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
     # Validate required columns exist
     first_row_keys = list(list_of_rows[0].keys()) if list_of_rows else []
     if first_row_keys:
-        _validate_required_columns(first_row_keys, source_name=&#34;DataFrame&#34;)
+        _validate_required_columns(
+            first_row_keys, source_name=&#34;DataFrame&#34;, values_as=values_as
+        )
     
     # Create report
     if ProcessingReport is not None:
@@ -2983,7 +3233,7 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
     
     # Process rows (similar to get_s_prime_from_data but add to RawDataset)
     compound_cols = [
-        &#39;Compound Name&#39;, &#39;Drug ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
+        &#39;Compound Name&#39;, &#39;Compound_ID&#39;, &#39;NCGCID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
         &#39;drug targets&#39;, &#39;MOA&#39;, &#39;Target&#39;, &#39;MoA&#39;, &#39;moa&#39;, &#39;target&#39;
     ]
     last_compound_values = {col: None for col in compound_cols}
@@ -3029,27 +3279,26 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
                     )
                     report.forward_filled_fields += 1
         
-        # Get compound info
+        # Get compound info (Compound_ID required; NCGCID pass-through only)
         compound_name = row.get(&#39;Compound Name&#39;, &#39;&#39;).strip() or &#39;Unknown&#39;
-        drug_id = row.get(&#39;Drug ID&#39;, &#39;&#39;).strip() or row.get(&#39;NCGCID&#39;, &#39;&#39;).strip()
+        compound_id = row.get(&#39;Compound_ID&#39;, &#39;&#39;).strip()
         
-        # Check for missing Drug ID - RAISE EXCEPTION
-        if not drug_id:
+        if not compound_id:
             raise ValueError(
-                f&#34;Row {row_idx + 1}: Missing required &#39;Drug ID&#39; or &#39;NCGCID&#39; value in DataFrame. &#34;
+                f&#34;Row {row_idx + 1}: Missing required &#39;Compound_ID&#39; value in DataFrame. &#34;
                 f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
-                f&#34;All rows must have a drug identifier.&#34;
+                f&#34;All rows must have a compound identifier.&#34;
             )
         
         # Track compound
-        if report and drug_id not in compounds_seen:
-            compounds_seen.add(drug_id)
+        if report and compound_id not in compounds_seen:
+            compounds_seen.add(compound_id)
             report.compounds_loaded += 1
         
         # Create compound and cell line objects
         compound = Compound(
             name=compound_name,
-            drug_id=drug_id,
+            drug_id=compound_id,
             pubchem_sid=row.get(&#39;pubchem_sid (substance id)&#39;, &#39;&#39;).strip() or None,
             smiles=row.get(&#39;SMILES&#39;, &#39;&#39;).strip() or None
         )
@@ -3060,36 +3309,86 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
         )
         
         # Extract raw dose-response data (if present)
-        data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
-        conc_cols = [k for k in row.keys() 
-                    if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
-                    and &#39;Units&#39; not in k and &#39;units&#39; not in k]
-        
         concentrations = None
         responses = None
         
-        if data_cols and conc_cols:
-            data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-            conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-            
-            responses = []
-            concentrations = []
-            
-            for data_col, conc_col in zip(data_cols, conc_cols):
-                try:
-                    resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
-                    conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
-                    resp_val = resp_val.strip() if isinstance(resp_val, str) else str(resp_val)
-                    conc_val = conc_val.strip() if isinstance(conc_val, str) else str(conc_val)
-                    if resp_val and conc_val:
-                        responses.append(float(resp_val))
-                        concentrations.append(float(conc_val))
-                except (ValueError, TypeError):
-                    continue
-            
-            if concentrations and responses:
-                units = row.get(&#39;Concentration Units (require microMol)&#39;, &#39;&#39;).strip() or &#39;microM&#39;
-                concentrations = convert_to_micromolar(concentrations, units)
+        if values_as == &#34;list&#34;:
+            resp_key = next((k for k in row if k.lower() == &#39;responses&#39;), None)
+            conc_key = next((k for k in row if k.lower() == &#39;concentrations&#39;), None)
+            if resp_key and conc_key:
+                resp_str = (row.get(resp_key) or &#39;&#39;).strip()
+                conc_str = (row.get(conc_key) or &#39;&#39;).strip()
+                if resp_str and conc_str:
+                    responses = []
+                    conc_parts = []
+                    for part in resp_str.split(&#39;,&#39;):
+                        t = part.strip()
+                        if t:
+                            try:
+                                v = float(t)
+                                if not (math.isnan(v) or math.isinf(v)):
+                                    responses.append(v)
+                            except (ValueError, TypeError):
+                                pass
+                    for part in conc_str.split(&#39;,&#39;):
+                        t = part.strip()
+                        if t:
+                            try:
+                                v = float(t)
+                                if not (math.isnan(v) or math.isinf(v)):
+                                    conc_parts.append(v)
+                            except (ValueError, TypeError):
+                                pass
+                    if len(responses) == len(conc_parts) and len(responses) &gt;= 4:
+                        units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                        if not units:
+                            raise ValueError(
+                                f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in DataFrame. &#34;
+                                f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}.&#34;
+                            )
+                        concentrations = convert_to_micromolar(conc_parts, units)
+                    else:
+                        if len(responses) != len(conc_parts):
+                            raise ValueError(
+                                f&#34;Row {row_idx + 1}: Responses and Concentrations length mismatch &#34;
+                                f&#34;({len(responses)} vs {len(conc_parts)}) in DataFrame.&#34;
+                            )
+                        responses = None
+                        concentrations = None
+        
+        else:
+            data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
+            conc_cols = [k for k in row.keys() 
+                        if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
+                        and &#39;Units&#39; not in k and &#39;units&#39; not in k]
+            if data_cols and conc_cols:
+                data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                responses = []
+                concentrations = []
+                for data_col, conc_col in zip(data_cols, conc_cols):
+                    try:
+                        resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
+                        conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
+                        resp_val = resp_val.strip() if isinstance(resp_val, str) else str(resp_val)
+                        conc_val = conc_val.strip() if isinstance(conc_val, str) else str(conc_val)
+                        if resp_val and conc_val:
+                            responses.append(float(resp_val))
+                            concentrations.append(float(conc_val))
+                    except (ValueError, TypeError):
+                        continue
+                if concentrations and responses:
+                    units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                    if not units:
+                        raise ValueError(
+                            f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in DataFrame. &#34;
+                            f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
+                            f&#34;Raw dose-response data requires Concentration_Units.&#34;
+                        )
+                    concentrations = convert_to_micromolar(concentrations, units)
+                else:
+                    concentrations = None
+                    responses = None
         
         # Extract pre-calculated Hill params (if present)
         hill_params = None
@@ -3113,7 +3412,7 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
         if not (has_raw_data or has_precalc_params):
             raise ValueError(
                 f&#34;Row {row_idx + 1}: No dose-response data found for compound &#39;{compound_name}&#39; &#34;
-                f&#34;(Drug ID: {drug_id}) in cell line &#39;{cell_line_name}&#39; in DataFrame. &#34;
+                f&#34;(Compound_ID: {compound_id}) in cell line &#39;{cell_line_name}&#39; in DataFrame. &#34;
                 f&#34;Row must have either: (1) raw data columns (DATA*/CONC*), or &#34;
                 f&#34;(2) pre-calculated parameters (AC50/Upper/Lower).&#34;
             )
@@ -3163,6 +3462,8 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
 <dd>pandas DataFrame with columns matching CSV format</dd>
 <dt><strong><code>assay_name</code></strong></dt>
 <dd>Name for assay (defaults to 'DataFrame')</dd>
+<dt><strong><code>values_as</code></strong></dt>
+<dd>"columns" (DATA<em>/CONC</em>) or "list" (Responses, Concentrations)</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <p>Tuple of (RawDataset, ProcessingReport)</p>
@@ -3259,7 +3560,12 @@ overwrites are logged as warnings.</dd>
     &#34;&#34;&#34;
     
     @staticmethod
-    def load(filepath: Union[str, Path], assay_name: Optional[str] = None, **csv_kwargs) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
+    def load(
+        filepath: Union[str, Path],
+        assay_name: Optional[str] = None,
+        values_as: str = &#34;columns&#34;,
+        **csv_kwargs
+    ) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
         &#34;&#34;&#34;
         Load raw data from CSV file or pandas DataFrame with quality reporting.
         
@@ -3269,6 +3575,7 @@ overwrites are logged as warnings.</dd>
         Args:
             filepath: Path to CSV file, or pandas DataFrame
             assay_name: Name for assay (defaults to filename stem or &#39;DataFrame&#39;)
+            values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
             **csv_kwargs: Additional arguments for csv.DictReader (ignored for DataFrames)
             
         Returns:
@@ -3282,14 +3589,16 @@ overwrites are logged as warnings.</dd>
         try:
             import pandas as pd
             if isinstance(filepath, pd.DataFrame):
-                return SPrime.load_from_dataframe(filepath, assay_name)
+                return SPrime.load_from_dataframe(filepath, assay_name, values_as=values_as)
         except ImportError:
             pass  # pandas not available, treat as file path
         except (AttributeError, TypeError):
             pass  # Not a DataFrame, treat as file path
         
         # Treat as file path
-        raw_dataset, report = RawDataset.load_from_file(filepath, assay_name, **csv_kwargs)
+        raw_dataset, report = RawDataset.load_from_file(
+            filepath, assay_name, values_as=values_as, **csv_kwargs
+        )
         
         # Auto-print and write log based on global config
         if report and ReportingConfig is not None:
@@ -3299,13 +3608,18 @@ overwrites are logged as warnings.</dd>
         return raw_dataset, report
     
     @staticmethod
-    def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
+    def load_from_dataframe(
+        df,
+        assay_name: Optional[str] = None,
+        values_as: str = &#34;columns&#34;,
+    ) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
         &#34;&#34;&#34;
         Load raw data from pandas DataFrame with quality reporting.
         
         Args:
             df: pandas DataFrame with columns matching CSV format
             assay_name: Name for assay (defaults to &#39;DataFrame&#39;)
+            values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
             
         Returns:
             Tuple of (RawDataset, ProcessingReport)
@@ -3334,7 +3648,9 @@ overwrites are logged as warnings.</dd>
         # Validate required columns exist
         first_row_keys = list(list_of_rows[0].keys()) if list_of_rows else []
         if first_row_keys:
-            _validate_required_columns(first_row_keys, source_name=&#34;DataFrame&#34;)
+            _validate_required_columns(
+                first_row_keys, source_name=&#34;DataFrame&#34;, values_as=values_as
+            )
         
         # Create report
         if ProcessingReport is not None:
@@ -3353,7 +3669,7 @@ overwrites are logged as warnings.</dd>
         
         # Process rows (similar to get_s_prime_from_data but add to RawDataset)
         compound_cols = [
-            &#39;Compound Name&#39;, &#39;Drug ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
+            &#39;Compound Name&#39;, &#39;Compound_ID&#39;, &#39;NCGCID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
             &#39;drug targets&#39;, &#39;MOA&#39;, &#39;Target&#39;, &#39;MoA&#39;, &#39;moa&#39;, &#39;target&#39;
         ]
         last_compound_values = {col: None for col in compound_cols}
@@ -3399,27 +3715,26 @@ overwrites are logged as warnings.</dd>
                         )
                         report.forward_filled_fields += 1
             
-            # Get compound info
+            # Get compound info (Compound_ID required; NCGCID pass-through only)
             compound_name = row.get(&#39;Compound Name&#39;, &#39;&#39;).strip() or &#39;Unknown&#39;
-            drug_id = row.get(&#39;Drug ID&#39;, &#39;&#39;).strip() or row.get(&#39;NCGCID&#39;, &#39;&#39;).strip()
+            compound_id = row.get(&#39;Compound_ID&#39;, &#39;&#39;).strip()
             
-            # Check for missing Drug ID - RAISE EXCEPTION
-            if not drug_id:
+            if not compound_id:
                 raise ValueError(
-                    f&#34;Row {row_idx + 1}: Missing required &#39;Drug ID&#39; or &#39;NCGCID&#39; value in DataFrame. &#34;
+                    f&#34;Row {row_idx + 1}: Missing required &#39;Compound_ID&#39; value in DataFrame. &#34;
                     f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
-                    f&#34;All rows must have a drug identifier.&#34;
+                    f&#34;All rows must have a compound identifier.&#34;
                 )
             
             # Track compound
-            if report and drug_id not in compounds_seen:
-                compounds_seen.add(drug_id)
+            if report and compound_id not in compounds_seen:
+                compounds_seen.add(compound_id)
                 report.compounds_loaded += 1
             
             # Create compound and cell line objects
             compound = Compound(
                 name=compound_name,
-                drug_id=drug_id,
+                drug_id=compound_id,
                 pubchem_sid=row.get(&#39;pubchem_sid (substance id)&#39;, &#39;&#39;).strip() or None,
                 smiles=row.get(&#39;SMILES&#39;, &#39;&#39;).strip() or None
             )
@@ -3430,36 +3745,86 @@ overwrites are logged as warnings.</dd>
             )
             
             # Extract raw dose-response data (if present)
-            data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
-            conc_cols = [k for k in row.keys() 
-                        if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
-                        and &#39;Units&#39; not in k and &#39;units&#39; not in k]
-            
             concentrations = None
             responses = None
             
-            if data_cols and conc_cols:
-                data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-                conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-                
-                responses = []
-                concentrations = []
-                
-                for data_col, conc_col in zip(data_cols, conc_cols):
-                    try:
-                        resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
-                        conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
-                        resp_val = resp_val.strip() if isinstance(resp_val, str) else str(resp_val)
-                        conc_val = conc_val.strip() if isinstance(conc_val, str) else str(conc_val)
-                        if resp_val and conc_val:
-                            responses.append(float(resp_val))
-                            concentrations.append(float(conc_val))
-                    except (ValueError, TypeError):
-                        continue
-                
-                if concentrations and responses:
-                    units = row.get(&#39;Concentration Units (require microMol)&#39;, &#39;&#39;).strip() or &#39;microM&#39;
-                    concentrations = convert_to_micromolar(concentrations, units)
+            if values_as == &#34;list&#34;:
+                resp_key = next((k for k in row if k.lower() == &#39;responses&#39;), None)
+                conc_key = next((k for k in row if k.lower() == &#39;concentrations&#39;), None)
+                if resp_key and conc_key:
+                    resp_str = (row.get(resp_key) or &#39;&#39;).strip()
+                    conc_str = (row.get(conc_key) or &#39;&#39;).strip()
+                    if resp_str and conc_str:
+                        responses = []
+                        conc_parts = []
+                        for part in resp_str.split(&#39;,&#39;):
+                            t = part.strip()
+                            if t:
+                                try:
+                                    v = float(t)
+                                    if not (math.isnan(v) or math.isinf(v)):
+                                        responses.append(v)
+                                except (ValueError, TypeError):
+                                    pass
+                        for part in conc_str.split(&#39;,&#39;):
+                            t = part.strip()
+                            if t:
+                                try:
+                                    v = float(t)
+                                    if not (math.isnan(v) or math.isinf(v)):
+                                        conc_parts.append(v)
+                                except (ValueError, TypeError):
+                                    pass
+                        if len(responses) == len(conc_parts) and len(responses) &gt;= 4:
+                            units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                            if not units:
+                                raise ValueError(
+                                    f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in DataFrame. &#34;
+                                    f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}.&#34;
+                                )
+                            concentrations = convert_to_micromolar(conc_parts, units)
+                        else:
+                            if len(responses) != len(conc_parts):
+                                raise ValueError(
+                                    f&#34;Row {row_idx + 1}: Responses and Concentrations length mismatch &#34;
+                                    f&#34;({len(responses)} vs {len(conc_parts)}) in DataFrame.&#34;
+                                )
+                            responses = None
+                            concentrations = None
+            
+            else:
+                data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
+                conc_cols = [k for k in row.keys() 
+                            if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
+                            and &#39;Units&#39; not in k and &#39;units&#39; not in k]
+                if data_cols and conc_cols:
+                    data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                    conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                    responses = []
+                    concentrations = []
+                    for data_col, conc_col in zip(data_cols, conc_cols):
+                        try:
+                            resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
+                            conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
+                            resp_val = resp_val.strip() if isinstance(resp_val, str) else str(resp_val)
+                            conc_val = conc_val.strip() if isinstance(conc_val, str) else str(conc_val)
+                            if resp_val and conc_val:
+                                responses.append(float(resp_val))
+                                concentrations.append(float(conc_val))
+                        except (ValueError, TypeError):
+                            continue
+                    if concentrations and responses:
+                        units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                        if not units:
+                            raise ValueError(
+                                f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in DataFrame. &#34;
+                                f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
+                                f&#34;Raw dose-response data requires Concentration_Units.&#34;
+                            )
+                        concentrations = convert_to_micromolar(concentrations, units)
+                    else:
+                        concentrations = None
+                        responses = None
             
             # Extract pre-calculated Hill params (if present)
             hill_params = None
@@ -3483,7 +3848,7 @@ overwrites are logged as warnings.</dd>
             if not (has_raw_data or has_precalc_params):
                 raise ValueError(
                     f&#34;Row {row_idx + 1}: No dose-response data found for compound &#39;{compound_name}&#39; &#34;
-                    f&#34;(Drug ID: {drug_id}) in cell line &#39;{cell_line_name}&#39; in DataFrame. &#34;
+                    f&#34;(Compound_ID: {compound_id}) in cell line &#39;{cell_line_name}&#39; in DataFrame. &#34;
                     f&#34;Row must have either: (1) raw data columns (DATA*/CONC*), or &#34;
                     f&#34;(2) pre-calculated parameters (AC50/Upper/Lower).&#34;
                 )
@@ -3569,7 +3934,7 @@ processing dose-response profiles, and calculating S' values.</p></div>
 <h3>Static methods</h3>
 <dl>
 <dt id="sprime.SPrime.load"><code class="name flex">
-<span>def <span class="ident">load</span></span>(<span>filepath: str | pathlib.Path, assay_name: str | None = None, **csv_kwargs) ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a> | None]</span>
+<span>def <span class="ident">load</span></span>(<span>filepath: str | pathlib.Path,<br>assay_name: str | None = None,<br>values_as: str = 'columns',<br>**csv_kwargs) ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a> | None]</span>
 </code></dt>
 <dd>
 <details class="source">
@@ -3577,7 +3942,12 @@ processing dose-response profiles, and calculating S' values.</p></div>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@staticmethod
-def load(filepath: Union[str, Path], assay_name: Optional[str] = None, **csv_kwargs) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
+def load(
+    filepath: Union[str, Path],
+    assay_name: Optional[str] = None,
+    values_as: str = &#34;columns&#34;,
+    **csv_kwargs
+) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
     &#34;&#34;&#34;
     Load raw data from CSV file or pandas DataFrame with quality reporting.
     
@@ -3587,6 +3957,7 @@ def load(filepath: Union[str, Path], assay_name: Optional[str] = None, **csv_kwa
     Args:
         filepath: Path to CSV file, or pandas DataFrame
         assay_name: Name for assay (defaults to filename stem or &#39;DataFrame&#39;)
+        values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
         **csv_kwargs: Additional arguments for csv.DictReader (ignored for DataFrames)
         
     Returns:
@@ -3600,14 +3971,16 @@ def load(filepath: Union[str, Path], assay_name: Optional[str] = None, **csv_kwa
     try:
         import pandas as pd
         if isinstance(filepath, pd.DataFrame):
-            return SPrime.load_from_dataframe(filepath, assay_name)
+            return SPrime.load_from_dataframe(filepath, assay_name, values_as=values_as)
     except ImportError:
         pass  # pandas not available, treat as file path
     except (AttributeError, TypeError):
         pass  # Not a DataFrame, treat as file path
     
     # Treat as file path
-    raw_dataset, report = RawDataset.load_from_file(filepath, assay_name, **csv_kwargs)
+    raw_dataset, report = RawDataset.load_from_file(
+        filepath, assay_name, values_as=values_as, **csv_kwargs
+    )
     
     # Auto-print and write log based on global config
     if report and ReportingConfig is not None:
@@ -3625,6 +3998,8 @@ uses global reporting configuration for console/log output.</p>
 <dd>Path to CSV file, or pandas DataFrame</dd>
 <dt><strong><code>assay_name</code></strong></dt>
 <dd>Name for assay (defaults to filename stem or 'DataFrame')</dd>
+<dt><strong><code>values_as</code></strong></dt>
+<dd>"columns" (DATA<em>/CONC</em>) or "list" (Responses, Concentrations)</dd>
 <dt><strong><code>**csv_kwargs</code></strong></dt>
 <dd>Additional arguments for csv.DictReader (ignored for DataFrames)</dd>
 </dl>
@@ -3639,7 +4014,7 @@ uses global reporting configuration for console/log output.</p>
 </dl></div>
 </dd>
 <dt id="sprime.SPrime.load_from_dataframe"><code class="name flex">
-<span>def <span class="ident">load_from_dataframe</span></span>(<span>df, assay_name: str | None = None) ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a> | None]</span>
+<span>def <span class="ident">load_from_dataframe</span></span>(<span>df, assay_name: str | None = None, values_as: str = 'columns') ‑> Tuple[<a title="sprime.sprime.RawDataset" href="sprime.html#sprime.sprime.RawDataset">RawDataset</a>, <a title="sprime.reporting.ProcessingReport" href="reporting.html#sprime.reporting.ProcessingReport">ProcessingReport</a> | None]</span>
 </code></dt>
 <dd>
 <details class="source">
@@ -3647,13 +4022,18 @@ uses global reporting configuration for console/log output.</p>
 <span>Expand source code</span>
 </summary>
 <pre><code class="python">@staticmethod
-def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
+def load_from_dataframe(
+    df,
+    assay_name: Optional[str] = None,
+    values_as: str = &#34;columns&#34;,
+) -&gt; Tuple[RawDataset, Optional[&#39;ProcessingReport&#39;]]:
     &#34;&#34;&#34;
     Load raw data from pandas DataFrame with quality reporting.
     
     Args:
         df: pandas DataFrame with columns matching CSV format
         assay_name: Name for assay (defaults to &#39;DataFrame&#39;)
+        values_as: &#34;columns&#34; (DATA*/CONC*) or &#34;list&#34; (Responses, Concentrations)
         
     Returns:
         Tuple of (RawDataset, ProcessingReport)
@@ -3682,7 +4062,9 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
     # Validate required columns exist
     first_row_keys = list(list_of_rows[0].keys()) if list_of_rows else []
     if first_row_keys:
-        _validate_required_columns(first_row_keys, source_name=&#34;DataFrame&#34;)
+        _validate_required_columns(
+            first_row_keys, source_name=&#34;DataFrame&#34;, values_as=values_as
+        )
     
     # Create report
     if ProcessingReport is not None:
@@ -3701,7 +4083,7 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
     
     # Process rows (similar to get_s_prime_from_data but add to RawDataset)
     compound_cols = [
-        &#39;Compound Name&#39;, &#39;Drug ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
+        &#39;Compound Name&#39;, &#39;Compound_ID&#39;, &#39;NCGCID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
         &#39;drug targets&#39;, &#39;MOA&#39;, &#39;Target&#39;, &#39;MoA&#39;, &#39;moa&#39;, &#39;target&#39;
     ]
     last_compound_values = {col: None for col in compound_cols}
@@ -3747,27 +4129,26 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
                     )
                     report.forward_filled_fields += 1
         
-        # Get compound info
+        # Get compound info (Compound_ID required; NCGCID pass-through only)
         compound_name = row.get(&#39;Compound Name&#39;, &#39;&#39;).strip() or &#39;Unknown&#39;
-        drug_id = row.get(&#39;Drug ID&#39;, &#39;&#39;).strip() or row.get(&#39;NCGCID&#39;, &#39;&#39;).strip()
+        compound_id = row.get(&#39;Compound_ID&#39;, &#39;&#39;).strip()
         
-        # Check for missing Drug ID - RAISE EXCEPTION
-        if not drug_id:
+        if not compound_id:
             raise ValueError(
-                f&#34;Row {row_idx + 1}: Missing required &#39;Drug ID&#39; or &#39;NCGCID&#39; value in DataFrame. &#34;
+                f&#34;Row {row_idx + 1}: Missing required &#39;Compound_ID&#39; value in DataFrame. &#34;
                 f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
-                f&#34;All rows must have a drug identifier.&#34;
+                f&#34;All rows must have a compound identifier.&#34;
             )
         
         # Track compound
-        if report and drug_id not in compounds_seen:
-            compounds_seen.add(drug_id)
+        if report and compound_id not in compounds_seen:
+            compounds_seen.add(compound_id)
             report.compounds_loaded += 1
         
         # Create compound and cell line objects
         compound = Compound(
             name=compound_name,
-            drug_id=drug_id,
+            drug_id=compound_id,
             pubchem_sid=row.get(&#39;pubchem_sid (substance id)&#39;, &#39;&#39;).strip() or None,
             smiles=row.get(&#39;SMILES&#39;, &#39;&#39;).strip() or None
         )
@@ -3778,36 +4159,86 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
         )
         
         # Extract raw dose-response data (if present)
-        data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
-        conc_cols = [k for k in row.keys() 
-                    if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
-                    and &#39;Units&#39; not in k and &#39;units&#39; not in k]
-        
         concentrations = None
         responses = None
         
-        if data_cols and conc_cols:
-            data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-            conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
-            
-            responses = []
-            concentrations = []
-            
-            for data_col, conc_col in zip(data_cols, conc_cols):
-                try:
-                    resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
-                    conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
-                    resp_val = resp_val.strip() if isinstance(resp_val, str) else str(resp_val)
-                    conc_val = conc_val.strip() if isinstance(conc_val, str) else str(conc_val)
-                    if resp_val and conc_val:
-                        responses.append(float(resp_val))
-                        concentrations.append(float(conc_val))
-                except (ValueError, TypeError):
-                    continue
-            
-            if concentrations and responses:
-                units = row.get(&#39;Concentration Units (require microMol)&#39;, &#39;&#39;).strip() or &#39;microM&#39;
-                concentrations = convert_to_micromolar(concentrations, units)
+        if values_as == &#34;list&#34;:
+            resp_key = next((k for k in row if k.lower() == &#39;responses&#39;), None)
+            conc_key = next((k for k in row if k.lower() == &#39;concentrations&#39;), None)
+            if resp_key and conc_key:
+                resp_str = (row.get(resp_key) or &#39;&#39;).strip()
+                conc_str = (row.get(conc_key) or &#39;&#39;).strip()
+                if resp_str and conc_str:
+                    responses = []
+                    conc_parts = []
+                    for part in resp_str.split(&#39;,&#39;):
+                        t = part.strip()
+                        if t:
+                            try:
+                                v = float(t)
+                                if not (math.isnan(v) or math.isinf(v)):
+                                    responses.append(v)
+                            except (ValueError, TypeError):
+                                pass
+                    for part in conc_str.split(&#39;,&#39;):
+                        t = part.strip()
+                        if t:
+                            try:
+                                v = float(t)
+                                if not (math.isnan(v) or math.isinf(v)):
+                                    conc_parts.append(v)
+                            except (ValueError, TypeError):
+                                pass
+                    if len(responses) == len(conc_parts) and len(responses) &gt;= 4:
+                        units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                        if not units:
+                            raise ValueError(
+                                f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in DataFrame. &#34;
+                                f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}.&#34;
+                            )
+                        concentrations = convert_to_micromolar(conc_parts, units)
+                    else:
+                        if len(responses) != len(conc_parts):
+                            raise ValueError(
+                                f&#34;Row {row_idx + 1}: Responses and Concentrations length mismatch &#34;
+                                f&#34;({len(responses)} vs {len(conc_parts)}) in DataFrame.&#34;
+                            )
+                        responses = None
+                        concentrations = None
+        
+        else:
+            data_cols = [k for k in row.keys() if k.startswith(&#39;Data&#39;) or k.startswith(&#39;DATA&#39;)]
+            conc_cols = [k for k in row.keys() 
+                        if (k.startswith(&#39;Conc&#39;) or k.startswith(&#39;CONC&#39;)) 
+                        and &#39;Units&#39; not in k and &#39;units&#39; not in k]
+            if data_cols and conc_cols:
+                data_cols = sorted(data_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                conc_cols = sorted(conc_cols, key=lambda x: int(&#39;&#39;.join(filter(str.isdigit, x)) or &#39;0&#39;))
+                responses = []
+                concentrations = []
+                for data_col, conc_col in zip(data_cols, conc_cols):
+                    try:
+                        resp_val = row.get(data_col, &#39;&#39;) or &#39;&#39;
+                        conc_val = row.get(conc_col, &#39;&#39;) or &#39;&#39;
+                        resp_val = resp_val.strip() if isinstance(resp_val, str) else str(resp_val)
+                        conc_val = conc_val.strip() if isinstance(conc_val, str) else str(conc_val)
+                        if resp_val and conc_val:
+                            responses.append(float(resp_val))
+                            concentrations.append(float(conc_val))
+                    except (ValueError, TypeError):
+                        continue
+                if concentrations and responses:
+                    units = row.get(&#39;Concentration_Units&#39;, &#39;&#39;).strip()
+                    if not units:
+                        raise ValueError(
+                            f&#34;Row {row_idx + 1}: Missing required &#39;Concentration_Units&#39; for raw data in DataFrame. &#34;
+                            f&#34;Compound: {compound_name}, Cell_Line: {cell_line_name}. &#34;
+                            f&#34;Raw dose-response data requires Concentration_Units.&#34;
+                        )
+                    concentrations = convert_to_micromolar(concentrations, units)
+                else:
+                    concentrations = None
+                    responses = None
         
         # Extract pre-calculated Hill params (if present)
         hill_params = None
@@ -3831,7 +4262,7 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
         if not (has_raw_data or has_precalc_params):
             raise ValueError(
                 f&#34;Row {row_idx + 1}: No dose-response data found for compound &#39;{compound_name}&#39; &#34;
-                f&#34;(Drug ID: {drug_id}) in cell line &#39;{cell_line_name}&#39; in DataFrame. &#34;
+                f&#34;(Compound_ID: {compound_id}) in cell line &#39;{cell_line_name}&#39; in DataFrame. &#34;
                 f&#34;Row must have either: (1) raw data columns (DATA*/CONC*), or &#34;
                 f&#34;(2) pre-calculated parameters (AC50/Upper/Lower).&#34;
             )
@@ -3881,6 +4312,8 @@ def load_from_dataframe(df, assay_name: Optional[str] = None) -&gt; Tuple[RawDat
 <dd>pandas DataFrame with columns matching CSV format</dd>
 <dt><strong><code>assay_name</code></strong></dt>
 <dd>Name for assay (defaults to 'DataFrame')</dd>
+<dt><strong><code>values_as</code></strong></dt>
+<dd>"columns" (DATA<em>/CONC</em>) or "list" (Responses, Concentrations)</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <p>Tuple of (RawDataset, ProcessingReport)</p>
@@ -4117,7 +4550,7 @@ overwrites are logged as warnings.</dd>
         profiles = sorted(self.profiles, key=lambda p: (p.compound.name, p.cell_line.name))
         
         fieldnames = [
-            &#39;Compound Name&#39;, &#39;Drug ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
+            &#39;Compound Name&#39;, &#39;Compound_ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
             &#39;Cell_Line&#39;, &#39;Cell_Line_Ref_ID&#39;,
             &#39;EC50&#39;, &#39;Upper&#39;, &#39;Lower&#39;, &#39;Hill&#39;, &#39;r2&#39;,
             &#34;S&#39;&#34;, &#39;Rank&#39;
@@ -4133,7 +4566,7 @@ overwrites are logged as warnings.</dd>
             for profile in profiles:
                 row = {
                     &#39;Compound Name&#39;: profile.compound.name,
-                    &#39;Drug ID&#39;: profile.compound.drug_id,
+                    &#39;Compound_ID&#39;: profile.compound.drug_id,
                     &#39;pubchem_sid (substance id)&#39;: profile.compound.pubchem_sid or &#39;&#39;,
                     &#39;SMILES&#39;: profile.compound.smiles or &#39;&#39;,
                     &#39;Cell_Line&#39;: profile.cell_line.name,
@@ -4176,7 +4609,7 @@ overwrites are logged as warnings.</dd>
             for comp in comparisons:
                 flat_results.append({
                     &#39;Compound Name&#39;: comp.get(&#39;compound_name&#39;, &#39;&#39;),
-                    &#39;Drug ID&#39;: comp.get(&#39;drug_id&#39;, &#39;&#39;),
+                    &#39;Compound_ID&#39;: comp.get(&#39;drug_id&#39;, &#39;&#39;),
                     &#39;Reference_Cell_Line&#39;: comp.get(&#39;reference_cell_line&#39;, &#39;&#39;),
                     &#39;Test_Cell_Line&#39;: comp.get(&#39;test_cell_line&#39;, &#39;&#39;),
                     &#34;S&#39; (Reference)&#34;: f&#34;{comp.get(&#39;s_prime_ref&#39;, 0.0):.4f}&#34;,
@@ -4192,7 +4625,7 @@ overwrites are logged as warnings.</dd>
             result[&#39;Rank&#39;] = str(rank)
         
         fieldnames = [
-            &#39;Rank&#39;, &#39;Compound Name&#39;, &#39;Drug ID&#39;,
+            &#39;Rank&#39;, &#39;Compound Name&#39;, &#39;Compound_ID&#39;,
             &#39;Reference_Cell_Line&#39;, &#39;Test_Cell_Line&#39;,
             &#34;S&#39; (Reference)&#34;, &#34;S&#39; (Test)&#34;, &#34;Delta S&#39;&#34;
         ]
@@ -4251,7 +4684,7 @@ def export_delta_s_prime_to_csv(
         for comp in comparisons:
             flat_results.append({
                 &#39;Compound Name&#39;: comp.get(&#39;compound_name&#39;, &#39;&#39;),
-                &#39;Drug ID&#39;: comp.get(&#39;drug_id&#39;, &#39;&#39;),
+                &#39;Compound_ID&#39;: comp.get(&#39;drug_id&#39;, &#39;&#39;),
                 &#39;Reference_Cell_Line&#39;: comp.get(&#39;reference_cell_line&#39;, &#39;&#39;),
                 &#39;Test_Cell_Line&#39;: comp.get(&#39;test_cell_line&#39;, &#39;&#39;),
                 &#34;S&#39; (Reference)&#34;: f&#34;{comp.get(&#39;s_prime_ref&#39;, 0.0):.4f}&#34;,
@@ -4267,7 +4700,7 @@ def export_delta_s_prime_to_csv(
         result[&#39;Rank&#39;] = str(rank)
     
     fieldnames = [
-        &#39;Rank&#39;, &#39;Compound Name&#39;, &#39;Drug ID&#39;,
+        &#39;Rank&#39;, &#39;Compound Name&#39;, &#39;Compound_ID&#39;,
         &#39;Reference_Cell_Line&#39;, &#39;Test_Cell_Line&#39;,
         &#34;S&#39; (Reference)&#34;, &#34;S&#39; (Test)&#34;, &#34;Delta S&#39;&#34;
     ]
@@ -4440,7 +4873,7 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
     profiles = sorted(self.profiles, key=lambda p: (p.compound.name, p.cell_line.name))
     
     fieldnames = [
-        &#39;Compound Name&#39;, &#39;Drug ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
+        &#39;Compound Name&#39;, &#39;Compound_ID&#39;, &#39;pubchem_sid (substance id)&#39;, &#39;SMILES&#39;,
         &#39;Cell_Line&#39;, &#39;Cell_Line_Ref_ID&#39;,
         &#39;EC50&#39;, &#39;Upper&#39;, &#39;Lower&#39;, &#39;Hill&#39;, &#39;r2&#39;,
         &#34;S&#39;&#34;, &#39;Rank&#39;
@@ -4456,7 +4889,7 @@ lists of dicts with delta S' for each compound-test_cellline combo</p></div>
         for profile in profiles:
             row = {
                 &#39;Compound Name&#39;: profile.compound.name,
-                &#39;Drug ID&#39;: profile.compound.drug_id,
+                &#39;Compound_ID&#39;: profile.compound.drug_id,
                 &#39;pubchem_sid (substance id)&#39;: profile.compound.pubchem_sid or &#39;&#39;,
                 &#39;SMILES&#39;: profile.compound.smiles or &#39;&#39;,
                 &#39;Cell_Line&#39;: profile.cell_line.name,

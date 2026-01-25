@@ -27,35 +27,46 @@ S_LAB = "S'"
 
 
 def _run_scenario_s_prime_only():
-    """Scenario 1: Raw -> Hill -> S' (single cell line, checkpoint only)."""
+    """Scenario 1: Raw -> Hill -> S' (single cell line, checkpoint only). Path A (columns) then Path A (list)."""
     print("\n" + "=" * 70)
     print("SCENARIO 1: Raw -> Hill -> S' (checkpoint only, no delta)")
     print("=" * 70)
 
-    csv_path = _SCRIPT_DIR / "demo_data_s_prime.csv"
-    print(f"\n[1] Loading {csv_path.name} (single cell line, raw DATA/CONC)...")
-    raw, _ = sp.load(csv_path)
-    print(f"    Loaded {len(raw)} profile(s)")
-
-    print("\n[2] Processing (fit Hill curves, calculate S')...")
+    # Path A (columns): DATA*/CONC*
+    csv_cols = _SCRIPT_DIR / "demo_data_s_prime.csv"
+    print(f"\n[1a] Path A (columns): Loading {csv_cols.name} (DATA/CONC)...")
+    raw, _ = sp.load(csv_cols, values_as="columns")
+    print(f"     Loaded {len(raw)} profile(s)")
+    print("     Processing (fit Hill, S')...")
     screening, _ = sp.process(raw, allow_overwrite_hill_coefficients=True)
-    print("    Done.")
-
-    print("\n[3] Hill params and S' (checkpoint)")
-    print("-" * 70)
-    print(f"{'Compound':<35} {'Cell_Line':<15} {'EC50':>12} {'Upper':>8} {'Lower':>8} {'Hill':>6} {'R2':>6} {S_LAB:>8}")
-    print("-" * 70)
+    print("\n     Hill params and S' (Path A columns)")
+    print("     " + "-" * 66)
+    print(f"     {'Compound':<35} {'Cell_Line':<12} {'EC50':>10} {S_LAB:>8}")
+    print("     " + "-" * 66)
     for p in screening.profiles:
         hp = p.hill_params
         ec = f"{hp.ec50:.4e}" if hp else ""
-        up = f"{hp.upper:.1f}" if hp else ""
-        lo = f"{hp.lower:.1f}" if hp else ""
-        h = f"{hp.hill_coefficient:.2f}" if hp and hp.hill_coefficient is not None else ""
-        r2 = f"{hp.r_squared:.3f}" if hp and hp.r_squared is not None else ""
         sp_val = f"{p.s_prime:.3f}" if p.s_prime is not None else ""
-        print(f"{p.compound.name:<35} {p.cell_line.name:<15} {ec:>12} {up:>8} {lo:>8} {h:>6} {r2:>6} {sp_val:>8}")
+        print(f"     {p.compound.name:<35} {p.cell_line.name:<12} {ec:>10} {sp_val:>8}")
 
-    print("\n    Checkpoint: Hill params and S' from raw data. Delta S' is separate (Scenario 3).")
+    # Path A (list): Responses, Concentrations
+    csv_list = _SCRIPT_DIR / "demo_data_raw_list.csv"
+    print(f"\n[1b] Path A (list): Loading {csv_list.name} (Responses/Concentrations)...")
+    raw, _ = sp.load(csv_list, values_as="list")
+    print(f"     Loaded {len(raw)} profile(s)")
+    print("     Processing (fit Hill, S')...")
+    screening, _ = sp.process(raw)
+    print("\n     Hill params and S' (Path A list)")
+    print("     " + "-" * 66)
+    print(f"     {'Compound':<35} {'Cell_Line':<12} {'EC50':>10} {S_LAB:>8}")
+    print("     " + "-" * 66)
+    for p in screening.profiles:
+        hp = p.hill_params
+        ec = f"{hp.ec50:.4e}" if hp else ""
+        sp_val = f"{p.s_prime:.3f}" if p.s_prime is not None else ""
+        print(f"     {p.compound.name:<35} {p.cell_line.name:<12} {ec:>10} {sp_val:>8}")
+
+    print("\n     Checkpoint: Hill params and S' from raw data. Delta S' is separate (Scenario 3).")
 
 
 def _run_scenario_precalc():
@@ -91,7 +102,7 @@ def _export_master_s_prime_table(screening_data, output_file: str):
     """Export master S' table (all profiles)."""
     profiles = sorted(screening_data.profiles, key=lambda p: (p.compound.name, p.cell_line.name))
     fieldnames = [
-        'Compound Name', 'Drug ID', 'pubchem_sid (substance id)', 'SMILES',
+        'Compound Name', 'Compound_ID', 'pubchem_sid (substance id)', 'SMILES',
         'Cell_Line', 'Cell_Line_Ref_ID',
         'EC50', 'Upper', 'Lower', 'Hill', 'r2',
         "S'", 'Rank', 'drug targets', 'MOA'
@@ -102,7 +113,7 @@ def _export_master_s_prime_table(screening_data, output_file: str):
         for profile in profiles:
             row = {
                 'Compound Name': profile.compound.name,
-                'Drug ID': profile.compound.drug_id,
+                'Compound_ID': profile.compound.drug_id,
                 'pubchem_sid (substance id)': profile.compound.pubchem_sid or '',
                 'SMILES': profile.compound.smiles or '',
                 'Cell_Line': profile.cell_line.name,
@@ -128,7 +139,7 @@ def _export_delta_s_prime_table(delta_results, output_file: str):
         for c in comparisons:
             flat.append({
                 'Compound Name': c.get('compound_name', ''),
-                'Drug ID': c.get('drug_id', ''),
+                'Compound_ID': c.get('drug_id', ''),
                 'Reference_Cell_Line': c.get('reference_cell_line', ''),
                 'Test_Cell_Line': c.get('test_cell_line', ''),
                 "S' (Reference)": f"{c.get('s_prime_ref', 0.0):.4f}",
@@ -138,7 +149,7 @@ def _export_delta_s_prime_table(delta_results, output_file: str):
     flat.sort(key=lambda x: float(x["Delta S'"]))
     for i, r in enumerate(flat, start=1):
         r['Rank'] = str(i)
-    fieldnames = ['Rank', 'Compound Name', 'Drug ID', 'Reference_Cell_Line', 'Test_Cell_Line', "S' (Reference)", "S' (Test)", "Delta S'"]
+    fieldnames = ['Rank', 'Compound Name', 'Compound_ID', 'Reference_Cell_Line', 'Test_Cell_Line', "S' (Reference)", "S' (Test)", "Delta S'"]
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()

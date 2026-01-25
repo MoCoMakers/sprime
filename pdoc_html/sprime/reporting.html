@@ -74,7 +74,7 @@ data quality issues, warnings, and processing metrics.</p>
        report.invalid_numeric_values or report.forward_filled_fields:
         print(&#34;DATA QUALITY ISSUES:&#34;)
         if report.missing_drug_ids:
-            print(f&#34;  Missing Drug IDs:           {report.missing_drug_ids}&#34;)
+            print(f&#34;  Missing Compound IDs:       {report.missing_drug_ids}&#34;)
         if report.missing_compound_names:
             print(f&#34;  Missing Compound Names:     {report.missing_compound_names}&#34;)
         if report.missing_cell_lines:
@@ -147,7 +147,7 @@ data quality issues, warnings, and processing metrics.</p>
        report.invalid_numeric_values or report.forward_filled_fields:
         print(&#34;DATA QUALITY ISSUES:&#34;)
         if report.missing_drug_ids:
-            print(f&#34;  Missing Drug IDs:           {report.missing_drug_ids}&#34;)
+            print(f&#34;  Missing Compound IDs:       {report.missing_drug_ids}&#34;)
         if report.missing_compound_names:
             print(f&#34;  Missing Compound Names:     {report.missing_compound_names}&#34;)
         if report.missing_cell_lines:
@@ -230,7 +230,7 @@ data quality issues, warnings, and processing metrics.</p>
             f.write(&#34;DATA QUALITY ISSUES\n&#34;)
             f.write(&#34;-&#34;*80 + &#34;\n&#34;)
             if report.missing_drug_ids:
-                f.write(f&#34;Missing Drug IDs:            {report.missing_drug_ids}\n&#34;)
+                f.write(f&#34;Missing Compound IDs:        {report.missing_drug_ids}\n&#34;)
             if report.missing_compound_names:
                 f.write(f&#34;Missing Compound Names:      {report.missing_compound_names}\n&#34;)
             if report.missing_cell_lines:
@@ -653,7 +653,7 @@ class WarningEntry:
         &#34;&#34;&#34;Format for log file.&#34;&#34;&#34;
         context_parts = []
         if self.drug_id:
-            context_parts.append(f&#34;Drug ID: {self.drug_id}&#34;)
+            context_parts.append(f&#34;Compound_ID: {self.drug_id}&#34;)
         if self.compound_name:
             context_parts.append(f&#34;Compound: {self.compound_name}&#34;)
         if self.cell_line:
@@ -711,7 +711,7 @@ class WarningEntry:
     &#34;&#34;&#34;Format for log file.&#34;&#34;&#34;
     context_parts = []
     if self.drug_id:
-        context_parts.append(f&#34;Drug ID: {self.drug_id}&#34;)
+        context_parts.append(f&#34;Compound_ID: {self.drug_id}&#34;)
     if self.compound_name:
         context_parts.append(f&#34;Compound: {self.compound_name}&#34;)
     if self.cell_line:

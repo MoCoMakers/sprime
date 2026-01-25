@@ -87,8 +87,9 @@ class TestReportGeneration:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '50',
@@ -112,8 +113,9 @@ class TestReportGeneration:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -136,8 +138,9 @@ class TestReportGeneration:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -180,16 +183,18 @@ class TestWarningTracking:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Conc0': '0.1'
             },
             {},  # Fully blank row
             {
                 'Compound Name': 'Test2',
-                'Drug ID': 'TEST2',
+                'Compound_ID': 'TEST2',
                 'Cell_Line': 'Cell2',
+                'Concentration_Units': 'microM',
                 'Data0': '20',
                 'Conc0': '0.2'
             }
@@ -202,27 +207,29 @@ class TestWarningTracking:
         assert len(blank_row_warnings) == 0
         assert report.rows_processed == 2  # Only non-blank rows
     
-    def test_missing_drug_id_raises_exception(self, tmp_path):
-        """Test that missing Drug ID raises ValueError."""
+    def test_missing_compound_id_raises_exception(self, tmp_path):
+        """Test that missing Compound_ID raises ValueError."""
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                # No Drug ID in first row either - so can't forward-fill
+                # No Compound_ID in first row either - so can't forward-fill
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Conc0': '0.1'
             },
             {
                 'Compound Name': 'Test2',
-                # Missing Drug ID - should raise exception
+                # Missing Compound_ID - should raise exception
                 'Cell_Line': 'Cell2',
+                'Concentration_Units': 'microM',
                 'Data0': '20',
                 'Conc0': '0.2'
             }
         ], tmp_path)
         
-        # Should raise ValueError for missing Drug ID column in header
-        with pytest.raises(ValueError, match="Required drug identifier column not found"):
+        # Should raise ValueError for missing Compound_ID column in header
+        with pytest.raises(ValueError, match="Required column 'Compound_ID' not found"):
             raw_data, report = SPrime.load(csv_file)
     
     def test_forward_fill_logged(self, tmp_path):
@@ -230,14 +237,16 @@ class TestWarningTracking:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Conc0': '0.1'
             },
             {
                 # Compound Name forward-filled
                 'Cell_Line': 'Cell2',
+                'Concentration_Units': 'microM',
                 'Data0': '20',
                 'Conc0': '0.2'
             }
@@ -256,8 +265,9 @@ class TestWarningTracking:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '20',
                 'Data2': '30',  # Only 3 data points
@@ -280,8 +290,9 @@ class TestWarningTracking:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': 'invalid',  # Non-numeric
                 'Data1': '20',
                 'Data2': '50',
@@ -306,8 +317,9 @@ class TestWarningTracking:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '10',  # Flat response - may fail fitting
                 'Data2': '10',
@@ -354,8 +366,9 @@ class TestConsoleOutput:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -381,8 +394,9 @@ class TestConsoleOutput:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -426,8 +440,9 @@ class TestLogFileWriting:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -460,8 +475,9 @@ class TestLogFileWriting:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -485,8 +501,9 @@ class TestLogFileWriting:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test',
-                'Drug ID': 'TEST',
+                'Compound_ID': 'TEST',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -527,8 +544,9 @@ class TestReportMetrics:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test1',
-                'Drug ID': 'TEST1',
+                'Compound_ID': 'TEST1',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Data1': '30',
                 'Data2': '70',
@@ -540,8 +558,9 @@ class TestReportMetrics:
             },
             {
                 'Compound Name': 'Test2',
-                'Drug ID': 'TEST2',
+                'Compound_ID': 'TEST2',
                 'Cell_Line': 'Cell2',
+                'Concentration_Units': 'microM',
                 'Data0': '5',
                 'Data1': '15',
                 'Data2': '60',
@@ -565,15 +584,17 @@ class TestReportMetrics:
         csv_file = self.create_test_csv([
             {
                 'Compound Name': 'Test1',
-                'Drug ID': 'TEST1',
+                'Compound_ID': 'TEST1',
                 'Cell_Line': 'Cell1',
+                'Concentration_Units': 'microM',
                 'Data0': '10',
                 'Conc0': '0.1'
             },
             {
-                # Missing Drug ID - should be row 3
+                # Missing Compound_ID - should be row 3
                 'Compound Name': 'Test2',
                 'Cell_Line': 'Cell2',
+                'Concentration_Units': 'microM',
                 'Data0': '20',
                 'Conc0': '0.2'
             }
@@ -582,6 +603,6 @@ class TestReportMetrics:
         raw_data, report = SPrime.load(csv_file)
         
         missing_id_warnings = [w for w in report.warnings 
-                              if "Drug ID" in w.message and w.row_number > 0]
+                              if "Compound_ID" in w.message and w.row_number > 0]
         assert len(missing_id_warnings) == 1
         assert missing_id_warnings[0].row_number == 3  # Row 3 (header is row 1)
