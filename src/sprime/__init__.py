@@ -35,6 +35,7 @@ from .sprime import (
     get_s_prime_from_data,
     calculate_delta_s_prime,
     convert_to_micromolar,
+    normalize_responses,
 )
 from . import hill_fitting
 
@@ -55,7 +56,7 @@ __all__ = [
     "Compound", "CellLine", "Assay", "HillCurveParams",
     "fit_hill_from_raw_data", "calculate_s_prime_from_params",
     "get_s_primes_from_file", "get_s_prime_from_data", "calculate_delta_s_prime",
-    "convert_to_micromolar",
+    "convert_to_micromolar", "normalize_responses",
     "hill_fitting",
 ]
 

@@ -220,8 +220,12 @@ class DoseResponseProfile:
         if self.hill_params is None:
             raise ValueError("Must fit Hill curve before calculating S'")
         
-        # S' = asinh((A-D)/C) where A=upper, D=lower, C=EC50
-        ratio = self.hill_params.amplitude / self.hill_params.ec50
+        # S' = asinh(|Upper-Lower| / EC50)
+        # abs() ensures S' is always non-negative regardless of which
+        # parameterisation the optimiser converged to (the sign of
+        # (upper-lower) flips when the Hill coefficient sign flips, but
+        # both describe the same curve).
+        ratio = abs(self.hill_params.amplitude) / self.hill_params.ec50
         self.s_prime = math.asinh(ratio)  # asinh(x) = ln(x + sqrt(x^2 + 1))
         return self.s_prime
     
@@ -1739,8 +1743,10 @@ def calculate_s_prime_from_params(ac50: float, upper: float, lower: float) -> fl
     Returns:
         float: S' value
     """
-    # S' = asinh((Upper-Lower)/EC50)
-    ratio = (upper - lower) / ac50
+    # S' = asinh(|Upper-Lower| / EC50)
+    # abs() ensures S' is always non-negative regardless of parameter
+    # naming convention (upper/lower roles swap with Hill coefficient sign).
+    ratio = abs(upper - lower) / ac50
     return math.asinh(ratio)
 
 
@@ -2211,6 +2217,57 @@ def convert_to_micromolar(concentrations: List[float], units: str) -> List[float
     
     factor = conversion_factors.get(units_lower, 1.0)
     return [c * factor for c in concentrations]
+
+def normalize_responses(
+    responses: List[float],
+    control_value: Optional[float] = None,
+    scale: float = 100.0
+) -> List[float]:
+    """
+    Normalize response values for dose-response curve fitting.
+    
+    This normalization is required to match the reference S' calculation methodology.
+    The normalization pipeline:
+    1. Divide by control value (if provided): ratio = response / control
+    2. Normalize to max = 1: normalized = ratio / max(ratio)
+    3. Scale to desired range: scaled = normalized * scale
+    
+    Args:
+        responses: List of raw response values
+        control_value: Control value (e.g., DMSO control) to divide by.
+                      If None, skips the control normalization step.
+        scale: Scale factor for final values (default: 100.0 for 0-100 range)
+        
+    Returns:
+        List of normalized response values
+        
+    Example:
+        >>> raw = [41.24, 40.86, 38.78, 38.38, 6.64, 0.94, 0, 0]
+        >>> dmso = 35.3
+        >>> normalized = normalize_responses(raw, control_value=dmso, scale=100)
+        >>> # Returns: [100, 99.06, 94.03, 93.06, 16.09, 2.27, 0, 0]
+    """
+    if not responses:
+        return []
+    
+    # Step 1: Divide by control value (if provided)
+    if control_value is not None and control_value != 0:
+        ratios = [r / control_value for r in responses]
+    else:
+        ratios = list(responses)
+    
+    # Step 2: Normalize to max = 1
+    max_ratio = max(ratios) if ratios else 1.0
+    if max_ratio == 0:
+        # All values are zero, return zeros
+        return [0.0] * len(responses)
+    
+    normalized = [r / max_ratio for r in ratios]
+    
+    # Step 3: Scale to desired range
+    scaled = [n * scale for n in normalized]
+    
+    return scaled
 
 
 def _try_float(value: str) -> Optional[float]:
