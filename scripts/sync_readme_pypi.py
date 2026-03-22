@@ -5,12 +5,14 @@ Generate README-PyPI.md from README.md for the PyPI project description.
 PyPI does not render GitHub-style fenced math or LaTeX; this script replaces the
 fenced math block with plain text that reads well on pypi.org.
 
-Machine-readable sync line (line 1 of README-PyPI.md):
-  [//]: # pypi-readme-sync FORMULA_REVISION:N LAST_VALIDATED_WITH_PYPI_RELEASE:vX.Y.Z
+Machine-readable footer (last line of README-PyPI.md; HTML comment, usually hidden):
+  <!-- pypi-sync v=N release=vX.Y.Z -->
 
-- FORMULA_REVISION: bump in this script when changing PYPI_MATH_REPLACEMENT below.
-- LAST_VALIDATED_WITH_PYPI_RELEASE: last release whose PyPI long description was
-  validated; update with: python scripts/sync_readme_pypi.py --set-release-tag v0.3.0
+- v (FORMULA_REVISION): bump in this script when changing PYPI_MATH_REPLACEMENT below.
+- release: last PyPI release you validated; set via:
+    python scripts/sync_readme_pypi.py --set-release-tag v0.3.0
+
+Legacy `[//]: # pypi-readme-sync ...` at the top is still parsed if present.
 
 Usage:
   python scripts/sync_readme_pypi.py              # write README-PyPI.md
@@ -43,24 +45,27 @@ PYPI_MATH_REPLACEMENT = """**Equivalent logarithmic form** — LaTeX renders on 
 
 """
 
-_SYNC_LINE_RE = re.compile(
-    r"^\[//\]: # pypi-readme-sync FORMULA_REVISION:(\d+) LAST_VALIDATED_WITH_PYPI_RELEASE:(\S+)\s*$",
-    re.MULTILINE,
+# New footer (preferred). Legacy top-of-file markdown comment still parsed.
+_SYNC_FOOTER_RE = re.compile(
+    r"<!--\s*pypi-sync\s+v=(\d+)\s+release=(\S+?)\s*-->",
+)
+_SYNC_LEGACY_RE = re.compile(
+    r"\[//\]: # pypi-readme-sync FORMULA_REVISION:(\d+) LAST_VALIDATED_WITH_PYPI_RELEASE:(\S+)",
 )
 
 
 def _parse_sync_meta(text: str) -> Tuple[Optional[int], Optional[str]]:
-    m = _SYNC_LINE_RE.search(text)
-    if not m:
-        return None, None
-    return int(m.group(1)), m.group(2)
+    m = _SYNC_FOOTER_RE.search(text)
+    if m:
+        return int(m.group(1)), m.group(2)
+    m = _SYNC_LEGACY_RE.search(text)
+    if m:
+        return int(m.group(1)), m.group(2)
+    return None, None
 
 
-def _build_sync_line(release_tag: str) -> str:
-    return (
-        f"[//]: # pypi-readme-sync FORMULA_REVISION:{FORMULA_REVISION} "
-        f"LAST_VALIDATED_WITH_PYPI_RELEASE:{release_tag}\n\n"
-    )
+def _build_footer(release_tag: str) -> str:
+    return f"\n<!-- pypi-sync v={FORMULA_REVISION} release={release_tag} -->\n"
 
 
 def _default_release_tag() -> str:
@@ -87,7 +92,7 @@ def generate_content(release_tag: str) -> str:
     if "```math" in replaced:
         print("error: multiple ```math blocks or replacement failed.", file=sys.stderr)
         sys.exit(2)
-    return _build_sync_line(release_tag) + replaced
+    return replaced.rstrip() + _build_footer(release_tag)
 
 
 def main() -> None:
@@ -100,7 +105,7 @@ def main() -> None:
     parser.add_argument(
         "--set-release-tag",
         metavar="TAG",
-        help="Set LAST_VALIDATED_WITH_PYPI_RELEASE (e.g. v0.3.0) and regenerate.",
+        help="Set `release=` in the footer (e.g. v0.3.0) and regenerate.",
     )
     args = parser.parse_args()
 
@@ -137,7 +142,7 @@ def main() -> None:
         return
 
     README_PYPI.write_text(content, encoding="utf-8", newline="\n")
-    print(f"Wrote {README_PYPI} (LAST_VALIDATED_WITH_PYPI_RELEASE={tag})")
+    print(f"Wrote {README_PYPI} (footer release={tag})")
 
 
 if __name__ == "__main__":

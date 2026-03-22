@@ -1,5 +1,3 @@
-[//]: # pypi-readme-sync FORMULA_REVISION:1 LAST_VALIDATED_WITH_PYPI_RELEASE:v0.2.1
-
 # sprime
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -481,3 +479,4 @@ Copyright (C) 2026 MoCo Maker Labs LLC
 
 - [DMV Petri Dish Computational Biology](https://compbio.dmvpetridish.com/) - Computational biology research group
 - [MoCo Makers](https://www.mocomakers.com/) - DIY tech/science community
+<!-- pypi-sync v=1 release=v0.2.1 -->

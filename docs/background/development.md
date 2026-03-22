@@ -62,8 +62,8 @@ python -m pdoc --html --output-dir pdoc_html --force sprime
   python scripts/sync_readme_pypi.py
   ```
 
-- **Release bookkeeping:** the first line of **`README-PyPI.md`** is a machine-readable comment, e.g.  
-  `[//]: # pypi-readme-sync FORMULA_REVISION:1 LAST_VALIDATED_WITH_PYPI_RELEASE:v0.2.1`  
+- **Release bookkeeping:** the **last line** of **`README-PyPI.md`** is a minimal HTML comment (usually hidden on PyPI/GitHub), e.g.
+  `<!-- pypi-sync v=1 release=v0.2.3 -->`
   After you publish a release whose long description you care about, optionally run:
 
   ```bash
