@@ -50,11 +50,7 @@ This metric allows researchers to:
 - Rank compounds by selectivity
 - Prioritize drug candidates for further investigation
 
-For detailed information and examples, see [Delta S' for Comparative Analysis](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md#delta-s-for-comparative-analysis).
-
-### S' pipeline branches (raw vs pre-calculated, controls, normalization)
-
-**Path A** = raw dose–response points; **Path B** = pre-calculated Hill parameters. For raw data, **`process`** can apply **response ÷ `Control_Response`** and then **`response_normalization`** (`asymptote_normalized` vs `response_scale`), depending on flags you set at **`load`**. For the full picture (when to skip control ratio, precalc-only rows, module names, and reference fixtures), see **[Basic Usage Guide — S' derivation pipeline (branches)](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/basic_usage_guide.md#s-derivation-pipeline-branches)**; run-through: **[`demonstration.ipynb`](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/demonstration.ipynb)**; theory: **[S' derivation pipeline](https://github.com/MoCoMakers/sprime/blob/main/docs/background/s_prime_derivation_pipeline.md)**.
+For detailed information and examples, see [Delta S' for Comparative Analysis](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md#delta-s-for-comparative-analysis). For **Path A / Path B**, control ratio, and normalization (buried reference), see [Background and Concepts — S' pipeline branches](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md#s-pipeline-branches-raw-vs-pre-calculated-controls-normalization).
 
 This library implements **Generation 2** of the S' methodology, which evolved from the original S metric. See the [Citation](#citation) section below for references.
 
@@ -471,7 +467,7 @@ Copyright (C) 2026 MoCo Maker Labs LLC
 
 ## Support
 
-- **Documentation**: [Usage docs](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/README.md) (guides, demos) * [Background / theory](https://github.com/MoCoMakers/sprime/blob/main/docs/background/README.md) (derivation, 4PL, development). For **vocabulary**, see [Terminology reference](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/terminology_reference.md). For S' **pipeline branches**, start with [S' derivation pipeline](https://github.com/MoCoMakers/sprime/blob/main/docs/background/s_prime_derivation_pipeline.md) Sec.3.4 (**validation vs `response_pipeline`**).
+- **Documentation**: [Usage docs](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/README.md) (guides, demos) * [Background / theory](https://github.com/MoCoMakers/sprime/blob/main/docs/background/README.md) (derivation, 4PL, development). For **vocabulary**, see [Terminology reference](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/terminology_reference.md). For S' **pipeline branches** (Path A/B, controls, normalization), see [Background and Concepts](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md#s-pipeline-branches-raw-vs-pre-calculated-controls-normalization) and [S' derivation pipeline](https://github.com/MoCoMakers/sprime/blob/main/docs/background/s_prime_derivation_pipeline.md) Sec.3.4.
 - **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/MoCoMakers/sprime/issues)
 - **Contact**: Reach out via [MoCo Makers Contact](https://www.mocomakers.com/contact/)
 

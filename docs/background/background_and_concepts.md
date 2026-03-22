@@ -246,6 +246,16 @@ This indicates the compound is more effective (higher S') in the tumor cell line
 
 A ranking system based on delta S' values allows researchers to systematically identify compounds with the greatest therapeutic potential within their screening assay.
 
+## S' pipeline branches (raw vs pre-calculated, controls, normalization)
+
+This subsection is a compact map of how data moves through sprime; the full picture (flags, precalc-only rows, module names, reference fixtures) lives in the usage and derivation docs linked below.
+
+**Path A** = raw dose–response points; **Path B** = pre-calculated Hill parameters. For raw data, **`process`** can apply **response ÷ `Control_Response`** and then **`response_normalization`** (`asymptote_normalized` vs `response_scale`), depending on flags you set at **`load`**.
+
+- **Step-by-step and CSV patterns:** [Basic Usage Guide — S' derivation pipeline (branches)](../usage/basic_usage_guide.md#s-derivation-pipeline-branches)
+- **Hands-on:** [demonstration notebook](../usage/demonstration.ipynb)
+- **Theory / narrative:** [S' derivation pipeline](s_prime_derivation_pipeline.md) (e.g. Sec. 3.4 — validation vs `response_pipeline`)
+
 ## Further Reading
 
 - [S' derivation pipeline](s_prime_derivation_pipeline.md) - **Canonical** narrative: pre-calculated vs raw, DMSO-relative ratios, two meanings of "normalized," asymptote-normalized vs response-scale, x100 convention
