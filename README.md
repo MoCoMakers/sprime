@@ -24,8 +24,11 @@ S' is a single value score that summarizes a drug's dose-response curve. The met
 
 (If your CSV uses legacy headers **Lower** / **Upper**, map them to **zero_asymptote** / **inf_asymptote** respectively--the numerator is **not** (Inf - Zero).)
 
-This is equivalent to (read as **Asymptote** with **Zero** / **Inf** subscript, and **EC** with **50** subscript):\
-$$S' = \ln\left(\frac{\mathrm{Asymptote}_{\mathrm{Zero}} - \mathrm{Asymptote}_{\mathrm{Inf}}}{\mathrm{EC}_{50}} + \sqrt{\left(\frac{\mathrm{Asymptote}_{\mathrm{Zero}} - \mathrm{Asymptote}_{\mathrm{Inf}}}{\mathrm{EC}_{50}}\right)^2 + 1}\right)$$
+This is equivalent to (read as **Asymptote** with **Zero** / **Inf** subscript, and **EC** with **50** subscript):
+
+```math
+S^{\prime} = \ln\left(\frac{\mathrm{Asymptote}_{\mathrm{Zero}} - \mathrm{Asymptote}_{\mathrm{Inf}}}{\mathrm{EC}_{50}} + \sqrt{\left(\frac{\mathrm{Asymptote}_{\mathrm{Zero}} - \mathrm{Asymptote}_{\mathrm{Inf}}}{\mathrm{EC}_{50}}\right)^2 + 1}\right)
+```
 
 In code and CSV those are **`Zero_asymptote`**, **`Inf_asymptote`**, and **`EC50`** (same as the `asinh` line above). Legacy **Lower** / **Upper** map to the two asymptotes.
 
