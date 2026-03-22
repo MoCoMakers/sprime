@@ -26,14 +26,15 @@ S' is a single value score that summarizes a drug's dose-response curve. The met
 
 This is equivalent to:
 
-$$S' = \ln\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{\text{EC50}} + \sqrt{\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{\text{EC50}}\right)^2 + 1}\right)$$
+$$S' = \ln\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{EC_{50}} + \sqrt{\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{EC_{50}}\right)^2 + 1}\right)$$
 
-Where:
+Where $\text{Zero\_asymptote}$ and $\text{Inf\_asymptote}$ are the **Zero** and **Inf** asymptotes (same names in API / CSV; legacy **Lower** / **Upper** map to those slots):
+
 - **Zero asymptote** = Response as concentration -> 0 (baseline; left of curve)
 - **Inf asymptote** = Response at saturating concentration (right of curve)
 - **EC50** = Half-maximal effect concentration
 
-**Sign is meaningful:** for many inhibition / viability assays the fitted **Zero** asymptote is **above** **Inf**, so the numerator is positive and larger |S'| indicates a stronger combined potency/efficacy signal in that orientation. See [Background and Concepts](docs/background/background_and_concepts.md#the-s-s-prime-metric) for detailed information.
+**Sign is meaningful:** for many inhibition / viability assays the fitted **Zero** asymptote is **above** **Inf**, so the numerator is positive and larger |S'| indicates a stronger combined potency/efficacy signal in that orientation. See [Background and Concepts](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md#the-s-s-prime-metric) for detailed information.
 
 ### Delta S' and Comparative Analysis
 
@@ -46,11 +47,11 @@ This metric allows researchers to:
 - Rank compounds by selectivity
 - Prioritize drug candidates for further investigation
 
-For detailed information and examples, see [Delta S' for Comparative Analysis](docs/background/background_and_concepts.md#delta-s-for-comparative-analysis).
+For detailed information and examples, see [Delta S' for Comparative Analysis](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md#delta-s-for-comparative-analysis).
 
 ### S' pipeline branches (raw vs pre-calculated, controls, normalization)
 
-**Path A** = raw dose–response points; **Path B** = pre-calculated Hill parameters. For raw data, **`process`** can apply **response ÷ `Control_Response`** and then **`response_normalization`** (`asymptote_normalized` vs `response_scale`), depending on flags you set at **`load`**. For the full picture (when to skip control ratio, precalc-only rows, module names, and reference fixtures), see **[Basic Usage Guide — S' derivation pipeline (branches)](docs/usage/basic_usage_guide.md#s-derivation-pipeline-branches)**; run-through: **[`demonstration.ipynb`](docs/usage/demonstration.ipynb)**; theory: **[S' derivation pipeline](docs/background/s_prime_derivation_pipeline.md)**.
+**Path A** = raw dose–response points; **Path B** = pre-calculated Hill parameters. For raw data, **`process`** can apply **response ÷ `Control_Response`** and then **`response_normalization`** (`asymptote_normalized` vs `response_scale`), depending on flags you set at **`load`**. For the full picture (when to skip control ratio, precalc-only rows, module names, and reference fixtures), see **[Basic Usage Guide — S' derivation pipeline (branches)](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/basic_usage_guide.md#s-derivation-pipeline-branches)**; run-through: **[`demonstration.ipynb`](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/demonstration.ipynb)**; theory: **[S' derivation pipeline](https://github.com/MoCoMakers/sprime/blob/main/docs/background/s_prime_derivation_pipeline.md)**.
 
 This library implements **Generation 2** of the S' methodology, which evolved from the original S metric. See the [Citation](#citation) section below for references.
 
@@ -99,7 +100,7 @@ ruff check .              # lint from repo root (includes docs/); see Developmen
 pre-commit install        # optional: rebuild + stage pdoc_html on commit when .py changes
 ```
 
-See **[Development guide](docs/background/development.md)** for full setup, pre-commit, API docs, and CI.
+See **[Development guide](https://github.com/MoCoMakers/sprime/blob/main/docs/background/development.md)** for full setup, pre-commit, API docs, and CI.
 
 ## Quick Start
 
@@ -107,7 +108,7 @@ The basic workflow in sprime is: **Load** raw data from CSV -> **Process** (fit 
 
 ### Jupyter / IPython: same workflow, runnable cells
 
-> **Skip ahead to code if you like.** In a clone of the repo, open **[`docs/usage/demonstration.ipynb`](docs/usage/demonstration.ipynb)** in **Jupyter** or **VS Code** (IPython kernel).
+> **Skip ahead to code if you like.** In a clone of the repo, open **[demonstration.ipynb](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/demonstration.ipynb)** in **Jupyter** or **VS Code** (IPython kernel).
 
 **Three ways to load data:**
 
@@ -117,7 +118,7 @@ The basic workflow in sprime is: **Load** raw data from CSV -> **Process** (fit 
 | **A -- Raw (list)** | `"list"` | `Responses`, `Concentrations` (comma-separated in one cell each) | Same as columns path for raw | Same as columns path |
 | **B -- Pre-calculated** | N/A | `AC50`, `Upper`, `Lower` (optional: Hill Slope, r2, S', etc.) | `Cell_Line`, `Compound_ID` | Uses imported Hill params; **no** vehicle ratio on precalc-only rows. Always recomputes S' from params (warns if S' was provided when raw refit overwrites). |
 
-**Vehicle ratio and `response_normalization` (matches [`demonstration.ipynb`](docs/usage/demonstration.ipynb))**
+**Vehicle ratio and `response_normalization` (matches [`demonstration.ipynb`](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/demonstration.ipynb))**
 
 | Situation | **÷ `Control_Response` at `process`?** | **`response_normalization`** (after ratio, **raw rows only**) |
 |-----------|----------------------------------------|---------------------------------------------------------------|
@@ -167,7 +168,7 @@ for profile in results:
     print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
 ```
 
-**Raw + vehicle (DMSO ratio in `process`)** — same idea as **Route 1** in [`demonstration.ipynb`](docs/usage/demonstration.ipynb); try **`demo_raw_vehicle_control_s_prime.csv`** (columns) or **`demo_raw_vehicle_control_raw_list.csv`** (list).
+**Raw + vehicle (DMSO ratio in `process`)** — same idea as **Route 1** in [`demonstration.ipynb`](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/demonstration.ipynb); try **`demo_raw_vehicle_control_s_prime.csv`** (columns) or **`demo_raw_vehicle_control_raw_list.csv`** (list).
 
 ```python
 from sprime import SPrime as sp
@@ -274,10 +275,10 @@ For Path A (raw), `Concentration_Units` must be present. All values are converte
 
 ### Next steps
 
-- **Terms and pipeline names:** [Terminology reference](docs/usage/terminology_reference.md)
-- **Format details:** [Basic Usage Guide](docs/usage/basic_usage_guide.md)
-- **Hands-on examples:** clone the repo (or copy [`docs/usage/`](docs/usage/) from GitHub) and open **[`demonstration.ipynb`](docs/usage/demonstration.ipynb)** beside the `demo_*.csv` files (demos are not shipped inside the PyPI wheel)
-- **Individual profiles & pre-calculated parameters:** [Basic Usage Guide](docs/usage/basic_usage_guide.md) (*Processing Individual Profiles*, *Creating dose-response profiles from scratch*, *Working with Pre-calculated Hill Parameters*)
+- **Terms and pipeline names:** [Terminology reference](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/terminology_reference.md)
+- **Format details:** [Basic Usage Guide](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/basic_usage_guide.md)
+- **Hands-on examples:** clone the repo (or copy [`docs/usage/`](https://github.com/MoCoMakers/sprime/tree/main/docs/usage) from GitHub) and open **[demonstration.ipynb](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/demonstration.ipynb)** beside the `demo_*.csv` files (demos are not shipped inside the PyPI wheel)
+- **Individual profiles & pre-calculated parameters:** [Basic Usage Guide](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/basic_usage_guide.md) (*Processing Individual Profiles*, *Creating dose-response profiles from scratch*, *Working with Pre-calculated Hill Parameters*)
 
 ## Key Features
 
@@ -296,22 +297,22 @@ For Path A (raw), `Concentration_Units` must be present. All values are converte
 ### Getting Started
 
 - **[API Reference](https://mocomakers.github.io/sprime/)** - API documentation (generated from docstrings)
-- **[Basic Usage Guide](docs/usage/basic_usage_guide.md)** - Step-by-step guide: formats, `load`/`process`, delta S', exports, testing
-- **[Terminology reference](docs/usage/terminology_reference.md)** - Plain-language definitions for screening jargon and sprime-specific pipeline names (`Control_Response`, asymptote-normalized vs response-scale, etc.)
+- **[Basic Usage Guide](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/basic_usage_guide.md)** - Step-by-step guide: formats, `load`/`process`, delta S', exports, testing
+- **[Terminology reference](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/terminology_reference.md)** - Plain-language definitions for screening jargon and sprime-specific pipeline names (`Control_Response`, asymptote-normalized vs response-scale, etc.)
 
 ### Core Concepts
 
-- **[Background and Concepts](docs/background/background_and_concepts.md)** - Introduction to qHTS, assays, S' metric, and key terminology (see also the [terminology reference](docs/usage/terminology_reference.md) for a compact glossary)
-- **[Understanding 4PL Dose-Response Curves](docs/background/README_4PL_Dose_Response.md)** - Detailed explanation of the Hill equation model
+- **[Background and Concepts](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md)** - Introduction to qHTS, assays, S' metric, and key terminology (see also the [terminology reference](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/terminology_reference.md) for a compact glossary)
+- **[Understanding 4PL Dose-Response Curves](https://github.com/MoCoMakers/sprime/blob/main/docs/background/README_4PL_Dose_Response.md)** - Detailed explanation of the Hill equation model
 
 ### Technical Documentation
 
-- **[Hill Curve Fitting Configuration](docs/usage/hill_curve_fitting_configuration.md)** - Technical details on curve fitting parameters and configuration options
-- **[Development guide](docs/background/development.md)** - Dev setup, tests, pre-commit, API docs, CI (for contributors)
+- **[Hill Curve Fitting Configuration](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/hill_curve_fitting_configuration.md)** - Technical details on curve fitting parameters and configuration options
+- **[Development guide](https://github.com/MoCoMakers/sprime/blob/main/docs/background/development.md)** - Dev setup, tests, pre-commit, API docs, CI (for contributors)
 
 ### Examples
 
-- **[demonstration.ipynb](docs/usage/demonstration.ipynb)** -- Jupyter walkthrough (load/process, ΔS′, optional CSV export); run from a clone with `docs/usage` and demo CSVs available (not inside `pip install` alone).
+- **[demonstration.ipynb](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/demonstration.ipynb)** -- Jupyter walkthrough (load/process, ΔS′, optional CSV export); run from a clone with `docs/usage` and demo CSVs available (not inside `pip install` alone).
 
 ## Requirements
 
@@ -367,11 +368,11 @@ pytest tests/test_hill_fitting.py
 pytest tests/test_integration.py
 ```
 
-See the [Basic Usage Guide](docs/usage/basic_usage_guide.md#running-the-test-suite) for more testing information.
+See the [Basic Usage Guide](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/basic_usage_guide.md#running-the-test-suite) for more testing information.
 
 ### API docs (pdoc_html)
 
-API docs live in `pdoc_html/` in the repo and are built from docstrings. The [API Reference](https://mocomakers.github.io/sprime/) on GitHub Pages is deployed from CI. Build locally: `python -m pdoc --html --output-dir pdoc_html --force sprime`. Optional: `pre-commit install` rebuilds and stages `pdoc_html` on commit when `.py` files change. See [Development guide](docs/background/development.md) for details.
+API docs live in `pdoc_html/` in the repo and are built from docstrings. The [API Reference](https://mocomakers.github.io/sprime/) on GitHub Pages is deployed from CI. Build locally: `python -m pdoc --html --output-dir pdoc_html --force sprime`. Optional: `pre-commit install` rebuilds and stages `pdoc_html` on commit when `.py` files change. See [Development guide](https://github.com/MoCoMakers/sprime/blob/main/docs/background/development.md) for details.
 
 ## Project Status
 
@@ -401,7 +402,7 @@ Contributions are welcome! We appreciate your help in making sprime better.
 
 1. **Fork the repository** on GitHub
 2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Set up dev environment** -- venv, `pip install -e ".[dev]"`, `pytest tests/`, optionally `pre-commit install`. See [Development guide](docs/background/development.md).
+3. **Set up dev environment** -- venv, `pip install -e ".[dev]"`, `pytest tests/`, optionally `pre-commit install`. See [Development guide](https://github.com/MoCoMakers/sprime/blob/main/docs/background/development.md).
 4. **Make your changes** and add tests if applicable
 5. **Run the test suite** -- `pytest tests/`
 6. **Commit your changes** (`git commit -m 'Add amazing feature'`). If you use pre-commit, the pdoc hook will rebuild and stage `pdoc_html` when you change `.py` files.
@@ -410,7 +411,7 @@ Contributions are welcome! We appreciate your help in making sprime better.
 
 ### Development Guidelines
 
-- Use **Ruff** as in **`pyproject.toml`** -- see [Development guide](docs/background/development.md#linting-and-formatting-ruff); run **`ruff check .`** before commit so it matches what **pre-commit** can flag (including under **`docs/`**)
+- Use **Ruff** as in **`pyproject.toml`** -- see [Development guide](https://github.com/MoCoMakers/sprime/blob/main/docs/background/development.md#linting-and-formatting-ruff); run **`ruff check .`** before commit so it matches what **pre-commit** can flag (including under **`docs/`**)
 - Add tests for new features
 - Update documentation as needed
 - Ensure all tests pass before submitting
@@ -459,13 +460,13 @@ We're also part of the DIY tech/science community at [MoCo Makers](https://www.m
 
 ## License
 
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License** - see the [LICENSE](https://github.com/MoCoMakers/sprime/blob/main/LICENSE) file for details.
 
 Copyright (C) 2026 MoCo Maker Labs LLC
 
 ## Support
 
-- **Documentation**: [Usage docs](docs/usage/README.md) (guides, demos) * [Background / theory](docs/background/README.md) (derivation, 4PL, development). For **vocabulary**, see [Terminology reference](docs/usage/terminology_reference.md). For S' **pipeline branches**, start with [S' derivation pipeline](docs/background/s_prime_derivation_pipeline.md) Sec.3.4 (**validation vs `response_pipeline`**).
+- **Documentation**: [Usage docs](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/README.md) (guides, demos) * [Background / theory](https://github.com/MoCoMakers/sprime/blob/main/docs/background/README.md) (derivation, 4PL, development). For **vocabulary**, see [Terminology reference](https://github.com/MoCoMakers/sprime/blob/main/docs/usage/terminology_reference.md). For S' **pipeline branches**, start with [S' derivation pipeline](https://github.com/MoCoMakers/sprime/blob/main/docs/background/s_prime_derivation_pipeline.md) Sec.3.4 (**validation vs `response_pipeline`**).
 - **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/MoCoMakers/sprime/issues)
 - **Contact**: Reach out via [MoCo Makers Contact](https://www.mocomakers.com/contact/)
 
