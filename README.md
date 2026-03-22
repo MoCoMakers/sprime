@@ -24,11 +24,10 @@ S' is a single value score that summarizes a drug's dose-response curve. The met
 
 (If your CSV uses legacy headers **Lower** / **Upper**, map them to **zero_asymptote** / **inf_asymptote** respectively--the numerator is **not** (Inf - Zero).)
 
-This is equivalent to:
+This is equivalent to (read as **Asymptote** with **Zero** / **Inf** subscript, and **EC** with **50** subscript):\
+$$S' = \ln\left(\frac{\mathrm{Asymptote}_{\mathrm{Zero}} - \mathrm{Asymptote}_{\mathrm{Inf}}}{\mathrm{EC}_{50}} + \sqrt{\left(\frac{\mathrm{Asymptote}_{\mathrm{Zero}} - \mathrm{Asymptote}_{\mathrm{Inf}}}{\mathrm{EC}_{50}}\right)^2 + 1}\right)$$
 
-$$S' = \ln\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{EC_{50}} + \sqrt{\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{EC_{50}}\right)^2 + 1}\right)$$
-
-Where $\text{Zero\_asymptote}$ and $\text{Inf\_asymptote}$ are the **Zero** and **Inf** asymptotes (same names in API / CSV; legacy **Lower** / **Upper** map to those slots):
+In code and CSV those are **`Zero_asymptote`**, **`Inf_asymptote`**, and **`EC50`** (same as the `asinh` line above). Legacy **Lower** / **Upper** map to the two asymptotes.
 
 - **Zero asymptote** = Response as concentration -> 0 (baseline; left of curve)
 - **Inf asymptote** = Response at saturating concentration (right of curve)
