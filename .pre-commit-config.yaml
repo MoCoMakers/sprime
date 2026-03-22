@@ -1,7 +1,11 @@
-# Optional: run `pre-commit install` to rebuild and stage pdoc_html before each commit
-# when Python sources change. Requires: pip install -e ".[dev]"
+# Run `pre-commit install` after `pip install -e ".[dev]"`.
+# Hooks run on `git commit`; any failing hook aborts the commit unless you use `git commit --no-verify`.
 
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.10
+    hooks:
+      - id: ruff
   - repo: local
     hooks:
       - id: pdoc

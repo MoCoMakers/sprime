@@ -1,0 +1,5 @@
+# Test fixtures
+
+- **`SPrime_variation_reference.csv`** — Variation reference for `response_pipeline` tests (parallel normalized vs response-scale columns). Update this file when the reference numbers change. The usage demos **`docs/usage/demo_raw_vehicle_control_*.csv`** are built from the same numeric slice (17-AAG / DMSO 35.3); if you change this fixture, rerun **`tests/test_usage_demos_golden.py`** and refresh the golden literals if outputs shift.
+
+  The **Parameter Values** rows publish **A-D (Emax)** as the **span** `zero_asymptote − inf_asymptote` and **C** as EC50. **Do not assume asymptotes** (e.g. `inf_asymptote = 0`): get `zero_asymptote` and `inf_asymptote` from **fitting raw data** or from **explicit precalc columns**. If you only have span + EC50 from the table, use `asinh(span / EC50)` for S′ — see `tests/test_sprime.py::test_specific_s_prime_value_asymptote_normalized` and `::test_specific_s_prime_value_response_scale`. On the non-normalized path, fitted **`inf_asymptote`** is often **~0.8–0.9** on this slice, not zero.

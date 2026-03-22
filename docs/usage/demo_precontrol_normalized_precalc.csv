@@ -1,0 +1,4 @@
+Compound_ID,Cell_Line,Control_Response,AC50,Upper,Lower,Hill_Slope,r2,S',Rank,Compound Name,pubchem_sid,SMILES,Cell_Line_Ref_ID,drug targets,MOA
+NCGC00013226-15,ipNF96.11C,,1.940037919,85.80556902,-64.77064257,2.472928377,0.99,5.044950504,1,Trifluoperazine hydrochloride,,CN1CCN(CCCN2C3=C(SC4=C2C=C(C=C4)C(F)(F)F)C=CC=C3)CC1,ACH-#####,DRD2,Nav1.4 Sodium Channel Blockers
+NCGC00013226-15,ipnf05.5 mc,,1.92,85.2,-64.1,2.45,0.98,5.046821041,2,Trifluoperazine hydrochloride,,CN1CCN(CCCN2C3=C(SC4=C2C=C(C=C4)C(F)(F)F)C=CC=C3)CC1,ACH-#####,DRD2,Nav1.4 Sodium Channel Blockers
+NCGC00013226-15,ipnf02.3,,1.95,84.5,-65.0,2.50,0.97,5.032656731,3,Trifluoperazine hydrochloride,,CN1CCN(CCCN2C3=C(SC4=C2C=C(C=C4)C(F)(F)F)C=CC=C3)CC1,ACH-#####,DRD2,Nav1.4 Sodium Channel Blockers

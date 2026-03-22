@@ -7,8 +7,9 @@ This document provides background information on quantitative high-throughput sc
 1. [Quantitative High-Throughput Screening (qHTS)](#quantitative-high-throughput-screening-qhts)
 2. [Understanding Assays](#understanding-assays)
 3. [Key Concepts and Terminology](#key-concepts-and-terminology)
-4. [The S' (S Prime) Metric](#the-s-s-prime-metric)
-5. [Delta S' for Comparative Analysis](#delta-s-for-comparative-analysis)
+4. [S' preprocessing branches (overview)](#s-preprocessing-branches-overview)
+5. [The S' (S Prime) Metric](#the-s-s-prime-metric)
+6. [Delta S' for Comparative Analysis](#delta-s-for-comparative-analysis)
 
 ## Quantitative High-Throughput Screening (qHTS)
 
@@ -72,6 +73,8 @@ When combining data from multiple assays, researchers must be cautious as differ
 
 ## Key Concepts and Terminology
 
+For a **compact glossary** (including sprime-specific names like *asymptote-normalized* vs *response-scale*), see the **[Terminology reference](usage/terminology_reference.md)** in `docs/usage/`.
+
 ### Cell Line
 
 A **cell line** is a clone or sampled tissue - frequently a TERT-mutated sample from a tissue biopsy - thought to be genetically identical within the assay. Cell lines represent biological systems being tested (e.g., tumor cells, normal cells, specific tissue types).
@@ -104,23 +107,23 @@ y = D + (A - D) / (1 + (x/C)^n)
 ```
 
 Where:
-- **A** = Lower asymptote (minimum response)
-- **D** = Upper asymptote (maximum response)
+- **A** = **zero_asymptote** (response as concentration -> 0; left side of dose axis)
+- **D** = **inf_asymptote** (response at saturating concentration; right side of dose axis)
 - **C** = EC50 (half-maximal concentration)
 - **n** = Hill coefficient (slope/steepness)
 
-### R-squared (R²)
+### R-squared (R^2)
 
-**R-squared (R²)** is a goodness of fit statistic historically used to assess how well dose-response data fits the Hill equation model. R² ranges from 0 to 1, where 1 = perfect fit. Higher R² indicates better curve quality.
+**R-squared (R^2)** is a goodness of fit statistic historically used to assess how well dose-response data fits the Hill equation model. R^2 ranges from 0 to 1, where 1 = perfect fit. Higher R^2 indicates better curve quality.
 
 Historically used to filter and validate dose-response profiles before analysis:
 
-- **R² = 1.0** - Perfect fit
-- **R² > 0.9** - Excellent fit (typically considered high quality)
-- **R² 0.7-0.9** - Good fit
-- **R² < 0.7** - Poor fit (may indicate experimental issues or non-sigmoidal response)
+- **R^2 = 1.0** - Perfect fit
+- **R^2 > 0.9** - Excellent fit (typically considered high quality)
+- **R^2 0.7-0.9** - Good fit
+- **R^2 < 0.7** - Poor fit (may indicate experimental issues or non-sigmoidal response)
 
-Poor fit (low R²) can indicate:
+Poor fit (low R^2) can indicate:
 - Insufficient data points
 - Data not following sigmoidal dose-response pattern
 - Experimental artifacts or errors
@@ -138,15 +141,15 @@ Each dose-response profile contains:
    
 2. **Concentration Data** - Compound concentrations tested
    - Column naming: `CONC0`, `CONC1`, `CONC2`, ..., `CONCN`
-   - Units: Typically microMolar (μM), but may vary
-   - Format: Scientific notation common (e.g., `1.30E-09` = 1.30 × 10⁻⁹ M)
+   - Units: Typically microMolar (uM), but may vary
+   - Format: Scientific notation common (e.g., `1.30E-09` = 1.30 x 10-9 M)
 
 3. **Fitted Hill Curve Parameters** (may be pre-calculated or calculated from raw data)
    - **AC50** or **EC50** - Half-maximal activity/effect concentration
-   - **Upper** (Infinity) - Upper asymptote of the curve (A parameter)
-   - **Lower** (Zero) - Lower asymptote of the curve (D parameter)
+   - **Inf_asymptote** (or legacy Upper/Infinity) - `inf_asymptote` (saturating dose, right of dose axis)
+   - **Zero_asymptote** (or legacy Lower/Zero) - `zero_asymptote` (concentration -> 0, left of dose axis)
    - **Hill** (slope) - Hill coefficient (steepness of curve)
-   - **R²** (r2) - Coefficient of determination (goodness of fit)
+   - **R^2** (r2) - Coefficient of determination (goodness of fit)
 
 #### Additional Metadata
 
@@ -155,7 +158,20 @@ Common fields across different data sources:
 - **Compound Information**: Name, Compound_ID, NCGCID (optional pass-through), SMILES, PubChem SID
 - **Cell Line Information**: Name (e.g., `ipNF96.11C`), Ref ID (e.g., `ACH-000007`, `depmap_id`)
 - **Biological Context**: Target(s), MoA (Mechanism of Action), Disease Area, Indication, Phase
-- **Quality Metrics**: R², AUC (Area under the curve), MAXR (Maximum response), Classification fields (CCLASS, CCLASS2)
+- **Quality Metrics**: R^2, AUC (Area under the curve), MAXR (Maximum response), Classification fields (CCLASS, CCLASS2)
+
+## S' preprocessing branches (overview)
+
+The **same S' formula** (see [below](#the-s-s-prime-metric)) can be fed by different **upstream pipelines**. Understanding these branches avoids confusion when people say "normalized" in screening workflows.
+
+| Branch | Short description |
+|--------|-------------------|
+| **Pre-calculated vs raw** | Some files already contain EC50 and asymptotes; others provide only concentration-response series. sprime **prefers raw** data when possible so curves can be **fit** and QC'd in one place; pre-calculated parameters remain supported when raw data are unavailable. |
+| **DMSO / vehicle step (first "normalized")** | For **raw** readouts, responses are often expressed as **ratio to a reference vehicle control** per sample (\(r/d\)); in CSV this is **`Control_Response`** (*DMSO* is biology shorthand). **Best practice** is a control matched to the **same experimental context** (e.g. per plate). Use **`skip_control_response_normalization=True`** at **import** when responses are already on the analysis scale (empty **`Control_Response`** allowed); **\(r/d\)** math is **`response_pipeline`**, not `load`--see [S' derivation pipeline Sec.3.4](s_prime_derivation_pipeline.md). |
+| **Baseline / asymptote step (second "normalized")** | After the DMSO step (or skip), you may **scale ratios so the maximum is 1** (then ×100; **asymptote-normalized** path--recommended for cross-dataset magnitude correction when the low-dose peak is the max) or **omit** that step (**response-scale** path--e.g. historical alignment with published NF1 / PNF1 analyses). |
+| **x100 convention** | Both major raw variants typically apply a **fixed x100** multiplier for **numerical convenience**; it is **not** biologically special by itself. |
+
+**Full detail (glossary, order of operations, implementation notes):** [S' derivation pipeline](s_prime_derivation_pipeline.md).
 
 ## The S' (S Prime) Metric
 
@@ -165,21 +181,23 @@ S' is a single value score that summarizes a drug's dose-response curve relative
 
 S' is calculated from Hill curve parameters using the formula:
 
-**S' = asinh((Upper - Lower) / EC50)**
+**S' = asinh((Zero_asymptote - Inf_asymptote) / EC50)**
+
+This matches the **named** Hill parameters (same order as CSV **Zero**/**Lower** vs **Inf**/**Upper**). It is **not** the same as :math:`(\mathrm{Inf}-\mathrm{Zero})/\mathrm{EC50}` inside ``asinh``--the 4PL fit still stores ``inf_asymptote`` and ``zero_asymptote`` in Hill form; S' uses their **difference in this order** so the sign tracks whether response **drops** (typical inhibition: Zero > Inf => positive S') or **rises** along dose.
 
 This is equivalent to:
 
-$$S' = \ln\left(\frac{\text{Upper} - \text{Lower}}{\text{EC50}} + \sqrt{\left(\frac{\text{Upper} - \text{Lower}}{\text{EC50}}\right)^2 + 1}\right)$$
+$$S' = \ln\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{\text{EC50}} + \sqrt{\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{\text{EC50}}\right)^2 + 1}\right)$$
 
 Where:
-- **Upper** = Upper asymptote of the dose-response curve (A parameter)
-- **Lower** = Lower asymptote of the dose-response curve (D parameter)
+- **Zero asymptote** = `zero_asymptote` (concentration -> 0, left of dose axis)
+- **Inf asymptote** = `inf_asymptote` (saturating dose, right of dose axis)
 - **EC50** = Half-maximal effect concentration (C parameter)
 
 ### What S' Represents
 
-- **Higher S' values** indicate stronger drug responses (higher efficacy and/or potency)
-- **Lower S' values** indicate weaker or no response
+- **Larger magnitude |S'|** reflects a stronger combined potency/efficacy signal (given consistent curve orientation and preprocessing)
+- **Sign** depends on asymptote ordering (inhibition vs activation shapes); compare compounds under the same assay convention
 - **S' combines potency and efficacy** into a single metric, making it useful for ranking compounds
 
 ### Dose-Response Curve Requirements
@@ -187,7 +205,7 @@ Where:
 For S' to be meaningful, dose-response curves must have:
 - Sufficient data points across a relevant range of concentrations
 - Data modeled with a four-parameter logistic curve (Hill Equation)
-- Resulting in reliable estimates of Upper asymptote, Lower asymptote, and EC50
+- Resulting in reliable estimates of Zero asymptote, Inf asymptote, and EC50
 
 ### Generation 2 Methodology
 
@@ -230,9 +248,10 @@ A ranking system based on delta S' values allows researchers to systematically i
 
 ## Further Reading
 
-- [Basic Usage Guide](usage/basic_usage_guide.md) - How to use sprime with your data
+- [S' derivation pipeline](s_prime_derivation_pipeline.md) - **Canonical** narrative: pre-calculated vs raw, DMSO-relative ratios, two meanings of "normalized," asymptote-normalized vs response-scale, x100 convention
+- [Basic Usage Guide](../usage/basic_usage_guide.md) - How to use sprime with your data
 - [Understanding 4PL Dose-Response Curves](README_4PL_Dose_Response.md) - Detailed explanation of the Hill equation model
-- [Hill Curve Fitting Configuration](usage/hill_curve_fitting_configuration.md) - Technical details on curve fitting parameters
+- [Hill Curve Fitting Configuration](../usage/hill_curve_fitting_configuration.md) - Technical details on curve fitting parameters
 
 
 

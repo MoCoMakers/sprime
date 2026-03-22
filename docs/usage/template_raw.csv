@@ -1,2 +1,2 @@
-Compound_ID,Cell_Line,Concentration_Units,DATA0,DATA1,DATA2,DATA3,DATA4,DATA5,CONC0,CONC1,CONC2,CONC3,CONC4,CONC5,Compound Name
-DRUG001,MyCellLine,microM,-65,-66,-67,-64,-62,-45,1e-9,3e-9,1e-8,3e-8,1e-7,3e-7,Example compound
+Compound_ID,Cell_Line,Concentration_Units,Control_Response,DATA0,DATA1,DATA2,DATA3,DATA4,DATA5,CONC0,CONC1,CONC2,CONC3,CONC4,CONC5,Compound Name
+DRUG001,MyCellLine,microM,-67,-65,-66,-67,-64,-62,-45,1e-9,3e-9,1e-8,3e-8,1e-7,3e-7,Example compound

@@ -7,6 +7,9 @@ master_s_prime_table.csv
 .cursor/
 src/sprime/_version.py
 
+# Notebook demo outputs (docs/usage/demonstration.ipynb)
+docs/usage/_notebook_output/
+
 # Build and distribution
 dist/
 build/
@@ -16,3 +19,5 @@ build/
 # Coverage
 htmlcov/
 .coverage
+
+.ipynb_checkpoints/

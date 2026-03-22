@@ -6,6 +6,42 @@ This document describes all configurable parameters for Hill curve fitting in sp
 
 The Hill curve fitting uses a four-parameter logistic (4PL) model to fit dose-response data. All assumptions and defaults can be modified to suit your specific data characteristics.
 
+## `sprime.fit_hill_from_raw_data` (preprocessing + fit)
+
+Use this entrypoint when you have **per-concentration readouts** and want the library to apply the **test/control (DMSO) ratio** and **response normalization** before calling the fitter. **S′ is not returned here** — compute it with `calculate_s_prime_from_params(ec50, zero_asymptote, inf_asymptote)` from the fitted parameters.
+
+```python
+from sprime import fit_hill_from_raw_data, calculate_s_prime_from_params
+
+params = fit_hill_from_raw_data(
+    raw_responses,
+    concentrations,
+    control_response=35.3,  # vehicle readout; required when skip_control_response_normalization=False
+    skip_control_response_normalization=False,  # default: strict control path
+    response_normalization="asymptote_normalized",  # default; or "response_scale"
+    # scale_factor: omit it — default is always 100 (variation reference / S′ convention); rarely change
+    concentration_units="microM",  # converted to uM internally; see table below
+)
+s_prime = calculate_s_prime_from_params(
+    params.ec50, params.zero_asymptote, params.inf_asymptote
+)
+```
+
+| Parameter | Default | Meaning |
+|-----------|---------|--------|
+| `skip_control_response_normalization` | `False` | If `False`, **`control_response` is required** (non-zero); each readout is divided by it. If `True`, `raw_responses` are already **test/control ratios** (or otherwise skip the ratio step). |
+| `response_normalization` | **`asymptote_normalized`** | After the optional ratio: **normalize_to_max_value** (largest value → 1, others proportionally lower), then ×100. Aligns with normalized columns in `SPrime_variation_reference.csv` when the sheet max matches the low-dose peak. |
+| | `response_scale` | After the optional ratio: ×100 only (no max normalization). Aligns with *Nonnormalized, x100 scale*. |
+| `scale_factor` | **`100`** | **Always use the default (100)** for real workflows. Override only in rare cases (e.g. tests, or `1.0` when responses already include ×100 from `response_pipeline`). |
+| `concentration_units` | `microM` | Passed to `convert_to_micromolar`; fit always uses **uM** internally. |
+
+**Supported `concentration_units` values** (case-insensitive; same as CSV `Concentration_Units` / `convert_to_micromolar`):  
+`fM`, `fm`, `femtom`; `pM`, `pm`, `picom`; `nM`, `nm`, `nanom`; `microM`, `microm`, `micro`, `um`; `mM`, `mm`, `millim`; `M`, `m`, `mol`.
+
+**Legacy / hand-preprocessed arrays:** If you already applied `response_pipeline` yourself, call with `skip_control_response_normalization=True`, `response_normalization="response_scale"`, and `scale_factor=1.0` so the fit sees your series unchanged. That `1.0` is one of the **few** legitimate exceptions to keeping `scale_factor` at **100**.
+
+---
+
 ## Function Signature
 
 ```python
@@ -13,10 +49,10 @@ hill_fitting.fit_hill_curve(
     concentrations: List[float],
     responses: List[float],
     *,
-    initial_lower: Optional[float] = None,
-    initial_upper: Optional[float] = None,
+    initial_zero_asymptote: Optional[float] = None,
+    initial_inf_asymptote: Optional[float] = None,
     initial_ec50: Optional[float] = None,
-    initial_hill_coefficient: Optional[float] = None,
+    initial_steepness_coefficient: Optional[float] = None,
     curve_direction: Optional[str] = None,
     maxfev: int = 3000000,
     zero_replacement: float = 1e-24,
@@ -31,31 +67,31 @@ hill_fitting.fit_hill_curve(
 
 These parameters provide starting values for the optimization algorithm. If not specified, defaults are used based on curve direction and data characteristics.
 
-#### `initial_lower` (Optional[float], default: None)
+#### `initial_zero_asymptote` (Optional[float], default: None)
 
-Initial guess for the lower asymptote (minimum response value).
+Initial guess for **zero_asymptote** (response as concentration -> 0; left side of dose axis).
 
 **Default behavior:**
 - For "up" curves: `0.001` (or `min(responses) * 0.1` if auto-estimated)
 - For "down" curves: `10.0` (or estimated from data)
 
 **When to modify:**
-- If your data has a known baseline response value
+- If your data has a known response at the low-concentration end
 - If default guesses lead to poor convergence
 - If responses are in a specific range (e.g., 0-100 for percentages)
 
 **Example:**
 ```python
-# If you know baseline is around 5%
+# If you know the low-concentration plateau is around 5%
 hill_params = fit_hill_curve(
     concentrations, responses,
-    initial_lower=5.0
+    initial_zero_asymptote=5.0
 )
 ```
 
-#### `initial_upper` (Optional[float], default: None)
+#### `initial_inf_asymptote` (Optional[float], default: None)
 
-Initial guess for the upper asymptote (maximum response value).
+Initial guess for the inf asymptote (response at saturating concentration).
 
 **Default behavior:**
 - For "up" curves: `3.784` (or `max(responses) * 1.1` if auto-estimated)
@@ -71,7 +107,7 @@ Initial guess for the upper asymptote (maximum response value).
 # For percentage response data
 hill_params = fit_hill_curve(
     concentrations, responses,
-    initial_upper=100.0
+    initial_inf_asymptote=100.0
 )
 ```
 
@@ -98,9 +134,9 @@ hill_params = fit_hill_curve(
 )
 ```
 
-#### `initial_hill_coefficient` (Optional[float], default: None)
+#### `initial_steepness_coefficient` (Optional[float], default: None)
 
-Initial guess for Hill coefficient (slope/steepness).
+Initial guess for the **steepness coefficient** *n* in the linear-x 4PL term `(x/EC50)^n`. This is the same mathematical role often called the **Hill coefficient** *n* in linear-x dose-response formulations; sprime uses `steepness_coefficient` / `initial_steepness_coefficient` to avoid confusion with log-x "Hill slope" values from other software.
 
 **Default behavior:**
 - For "up" curves: `1.515`
@@ -116,7 +152,7 @@ Initial guess for Hill coefficient (slope/steepness).
 # For a steep curve
 hill_params = fit_hill_curve(
     concentrations, responses,
-    initial_hill_coefficient=2.5
+    initial_steepness_coefficient=2.5
 )
 ```
 
@@ -127,12 +163,12 @@ hill_params = fit_hill_curve(
 Specifies whether the curve increases or decreases with concentration.
 
 **Options:**
-- `None`: Auto-detect (tries both "up" and "down", selects best R²)
+- `None`: Auto-detect (tries both "up" and "down", selects best R^2)
 - `"up"`: Increasing response with concentration (e.g., activation)
 - `"down"`: Decreasing response with concentration (e.g., inhibition)
 
 **Default behavior:**
-- Auto-detects by trying both directions and selecting the fit with highest R²
+- Auto-detects by trying both directions and selecting the fit with highest R^2
 
 **When to modify:**
 - If you know the direction and want faster fitting (skip bidirectional)
@@ -201,8 +237,8 @@ Constraints on parameter values during optimization.
 **Format:**
 ```python
 bounds = (
-    [lower_min, hill_min, ec50_min, upper_min],  # Lower bounds
-    [lower_max, hill_max, ec50_max, upper_max]   # Upper bounds
+    [zero_asymptote_min, hill_min, ec50_min, inf_asymptote_min],  # Lower bounds
+    [zero_asymptote_max, hill_max, ec50_max, inf_asymptote_max]   # Upper bounds
 )
 ```
 
@@ -220,7 +256,7 @@ bounds = (
 hill_params = fit_hill_curve(
     concentrations, responses,
     bounds=(
-        [0, -5, 0.1, 0],      # Lower bounds: [lower, hill, ec50, upper]
+        [0, -5, 0.1, 0],      # Lower bounds: [zero_asymptote, hill, ec50, inf_asymptote]
         [100, 5, 100, 100]     # Upper bounds
     )
 )
@@ -263,10 +299,10 @@ hill_params = hill_fitting.fit_hill_curve(
 hill_params = hill_fitting.fit_hill_curve(
     concentrations=concentrations,
     responses=responses,
-    initial_lower=0.0,      # Known baseline
-    initial_upper=100.0,    # Percentage data
-    initial_ec50=10.0,      # Approximate EC50
-    initial_hill_coefficient=1.5
+    initial_zero_asymptote=0.0,      # Known low-dose limit
+    initial_inf_asymptote=100.0,     # Percentage data
+    initial_ec50=10.0,               # Approximate EC50
+    initial_steepness_coefficient=1.5
 )
 ```
 
@@ -322,15 +358,15 @@ hill_params = profile.fit_hill_curve(
 ### Convergence Failures
 
 If fitting fails to converge:
-1. **Check data quality**: Ensure sufficient data points (≥4) spanning full response range
+1. **Check data quality**: Ensure sufficient data points (>=4) spanning full response range
 2. **Adjust initial guesses**: Provide better starting values based on your data
 3. **Increase maxfev**: Allow more iterations (though default is already very high)
 4. **Add bounds**: Constrain parameters to reasonable ranges
 5. **Try different curve direction**: Explicitly specify "up" or "down"
 
-### Poor Fit Quality (Low R²)
+### Poor Fit Quality (Low R^2)
 
-If R² is low:
+If R^2 is low:
 1. **Check data**: Ensure data follows sigmoidal pattern
 2. **Remove outliers**: Outliers can significantly affect fit
 3. **Adjust initial guesses**: Better starting values can improve convergence
@@ -349,10 +385,10 @@ If parameters are NaN:
 
 | Parameter | "Up" Curve Default | "Down" Curve Default | Auto-Estimated |
 |-----------|-------------------|---------------------|----------------|
-| `initial_lower` | 0.001 | 10.0 | `min(responses) * 0.1` |
-| `initial_upper` | 3.784 | 90.0 | `max(responses) * 1.1` |
+| `initial_zero_asymptote` | 0.001 | 10.0 | `min(responses) * 0.1` |
+| `initial_inf_asymptote` | 3.784 | 90.0 | `max(responses) * 1.1` |
 | `initial_ec50` | 108.0 | 0.4 | `median(concentrations)` |
-| `initial_hill_coefficient` | 1.515 | -0.3 | N/A |
+| `initial_steepness_coefficient` | 1.515 | -0.3 | N/A |
 | `maxfev` | 3,000,000 | 3,000,000 | N/A |
 | `zero_replacement` | 1e-24 | 1e-24 | N/A |
 | `curve_direction` | Auto-detect (tries both) | Auto-detect (tries both) | N/A |
@@ -361,14 +397,14 @@ If parameters are NaN:
 
 The parameters above control **curve fitting** (e.g. `hill_fitting.fit_hill_curve`, or `**fit_params` passed to `sp.process`). A separate **processing** option affects when pre-calc Hill params are overwritten by fitted values:
 
-- **`allow_overwrite_hill_coefficients`**: When your CSV has **both** raw DATA/CONC **and** pre-calc (AC50, Upper, Lower, Hill_Slope, r2), sprime fits from raw and overwrites pre-calc. By default it **raises** unless you set `allow_overwrite_hill_coefficients=True`. When you allow overwrite, sprime **logs a warning** (console + report) each time pre-calc is overwritten.
+- **`allow_overwrite_precalc_params`**: When your CSV has **both** raw DATA/CONC **and** pre-calc (AC50, Upper, Lower, Hill_Slope, r2), sprime fits from raw and overwrites pre-calc. By default it **raises** unless you set `allow_overwrite_precalc_params=True`. When you allow overwrite, sprime **logs a warning** (console + report) each time pre-calc is overwritten.
 
-See [Basic Usage Guide](basic_usage_guide.md) § "Processing option: allow_overwrite_hill_coefficients" for details.
+See [Basic Usage Guide](basic_usage_guide.md) Sec. "Processing option: allow_overwrite_precalc_params" for details.
 
 ## References
 
 For more information on the underlying optimization algorithm and 4PL model, see:
-- [Understanding 4PL Dose-Response Curves](../README_4PL_Dose_Response.md) - User-friendly explanation of 4PL model
-- [Background and Concepts](../background_and_concepts.md) - qHTS background and terminology
+- [Understanding 4PL Dose-Response Curves](../background/README_4PL_Dose_Response.md) - User-friendly explanation of 4PL model
+- [Background and Concepts](../background/background_and_concepts.md) - qHTS background and terminology
 - [Basic Usage Guide](basic_usage_guide.md) - How to use sprime with your data
 

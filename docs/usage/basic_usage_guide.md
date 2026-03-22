@@ -5,30 +5,35 @@ This guide walks you through using sprime to analyze high-throughput screening d
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
-2. [Data Format](#data-format)
-3. [Loading Data](#loading-data)
-4. [Processing Data](#processing-data)
-5. [Calculating Delta S'](#calculating-delta-s)
-6. [Complete Example](#complete-example)
-7. [Exporting Results](#exporting-results)
-8. [Data Quality Reporting](#data-quality-reporting)
-9. [Advanced Usage](#advanced-usage)
-10. [Running the Test Suite](#running-the-test-suite)
-11. [Troubleshooting](#troubleshooting)
+2. [Terminology reference](terminology_reference.md)
+3. [S' derivation pipeline (branches)](#s-derivation-pipeline-branches)
+4. [Data Format](#data-format)
+5. [Loading Data](#loading-data)
+6. [Processing Data](#processing-data)
+7. [Calculating Delta S'](#calculating-delta-s)
+8. [Complete Example](#complete-example)
+9. [Exporting Results](#exporting-results)
+10. [Data Quality Reporting](#data-quality-reporting)
+11. [Advanced Usage](#advanced-usage)
+12. [Running the Test Suite](#running-the-test-suite)
+13. [Troubleshooting](#troubleshooting)
 
 ## Quick Start
 
 The basic workflow in sprime is:
 
-1. **Load** raw data from CSV → `RawDataset`
-2. **Process** data (fit curves, calculate S') → `ScreeningDataset`
+1. **Load** raw data from CSV -> `RawDataset`
+2. **Process** data (fit curves, calculate S') -> `ScreeningDataset`
 3. **Analyze** using delta S' for comparative analysis
 
 ```python
 from sprime import SPrime as sp
 
 # Load and process data (use your CSV, or download a sample from the README Quick Start)
-raw_data, _ = sp.load("your_data.csv")
+raw_data, _ = sp.load(
+    "your_data.csv",
+    response_normalization="asymptote_normalized",  # or "response_scale" per lab sheet
+)
 screening_data, _ = sp.process(raw_data)
 
 # Calculate delta S' for comparative analysis
@@ -37,6 +42,45 @@ delta_results = screening_data.calculate_delta_s_prime(
     test_cell_lines=["tumor_cell_line"]
 )
 ```
+
+**Vocabulary:** If any terms above are unfamiliar, use the **[Terminology reference](terminology_reference.md)** (plain-language definitions and sprime-specific usage).
+
+## S' derivation pipeline (branches)
+
+Before you format CSVs, it helps to know **which conceptual path** your study uses. sprime supports **multiple conceptual paths**: datasets may ship **pre-calculated** curve parameters (EC50, asymptotes) or **raw** dose–response points; **raw workflows are encouraged** when available so curves are fit and QC'd consistently.
+
+### Path A (raw)
+
+CSV **`Control_Response`** holds the vehicle (e.g. DMSO) readout for that row.
+
+- **`skip_control_response_normalization=False`** (default): **`process`** applies **response ÷ `Control_Response`**, then the import-time flag **`response_normalization`**:
+  - **`"asymptote_normalized"`** → **`sprime.response_pipeline.pipeline_asymptote_normalized`**: ratio, then rescale so the curve **maximum is 1**, then ×100.
+  - **`"response_scale"`** → **`pipeline_response_scale`**: ratio, then ×100 only.
+- **`skip_control_response_normalization=True`**: **`process`** does **not** divide by **`Control_Response`** (responses are already on the analysis scale; empty control cells allowed on those rows). You still pass **`response_normalization`** on **`load`** to **document** the intended scale of the numbers.
+
+Those steps are specified in [S' derivation pipeline Sec.3.4](../background/s_prime_derivation_pipeline.md).
+
+### Path B (pre-calculated)
+
+Rows with **only** imported Hill parameters (no raw `DATA*`/`CONC*` or list curve) have **no** per-point vehicle ratio step. You still **must** pass **`response_normalization`** on **`load`** (required API); it **applies only** to rows that also contain raw curves in the same file.
+
+### `response_normalization` vs Hill asymptote columns
+
+The keyword **`response_normalization`** names **only** the **post–control-ratio** scaling pipeline above. It is **not** “asymptote vs response level” in the sense of the Hill CSV fields **Zero** / **Lower** and **Inf** / **Upper**—those are **fitted curve endpoints**, not this import flag.
+
+### Other vocabulary
+
+- **DMSO (vehicle)-relative ratios** for raw readouts help control **plate-to-plate** variation; **`Control_Response`** is the per-row vehicle readout (*DMSO* is shorthand).
+- **Default import** validates **`Control_Response`** (non-empty, non-zero) when **`skip_control_response_normalization=False`**.
+- **×100** is a **conventional** multiplier in both major raw pipelines for readable magnitudes; it is not a biological parameter by itself.
+
+**Library implementation:** **`sprime.response_pipeline`** also exposes `ratios_to_control`, `normalize_to_max_value`, and `scale_responses`. **`SPrime.load`**, **`RawDataset.load_from_file`**, **`get_s_primes_from_file`**, and **`get_s_prime_from_data`** require keyword-only **`response_normalization=`** so the lab's sheet style is fixed at **first validation**; **`process`** applies it after the optional test/control step.
+
+**Variation reference (tests):** [`tests/fixtures/SPrime_variation_reference.csv`](../../tests/fixtures/SPrime_variation_reference.csv) encodes reference spreadsheet cases (parallel normalized vs response-scale columns). Values are **human-maintained**; do not assume every cell matches a strict float pipeline without checking.
+
+**Hands-on:** open **[`demonstration.ipynb`](demonstration.ipynb)** (*Import-time choices* and the five-route table) beside the **`demo_*.csv`** files.
+
+**Canonical narrative:** [S' derivation pipeline](../background/s_prime_derivation_pipeline.md) · **Glossary:** [Terminology reference](terminology_reference.md).
 
 ## Data Format
 
@@ -51,6 +95,7 @@ sprime expects CSV files with the following structure:
 
 ### Optional Columns
 
+- **Control_Response**: Per-row **vehicle (DMSO) control** readout for raw Path A, same units as `DATA*` / `Responses`. By default (**`skip_control_response_normalization=False`**), the loader requires this column and a **non-zero** value on each raw row. Templates use a toy value; **[demo_raw_vehicle_control_s_prime.csv](demo_raw_vehicle_control_s_prime.csv)** ships **raw % nucleus** and **uM** concentrations row-aligned with **`tests/fixtures/SPrime_variation_reference.csv`**, plus **35.3** from the DMSO row. If responses are **already** control-normalized (e.g. ipNF-style demos), keep the column present but **empty** and pass **`skip_control_response_normalization=True`** when loading--see **[demo_precontrol_normalized_s_prime.csv](demo_precontrol_normalized_s_prime.csv)** and **[demo_data_control_response_questions.md](demo_data_control_response_questions.md)**.
 - **pubchem_sid**: PubChem substance identifier
 - **SMILES**: Chemical structure notation
 - **Cell_Line_Ref_ID**: Reference identifier for the cell line
@@ -60,8 +105,8 @@ sprime expects CSV files with the following structure:
 
 Raw data can be in two layouts. Use **columns** (default) or **list** via `values_as`:
 
-- **`values_as="columns"`** (default): One column per value — `Data0`..`DataN`, `Conc0`..`ConcN`.
-- **`values_as="list"`**: Two columns — `Responses` and `Concentrations`. Each cell holds comma-separated values (e.g. `"4000,300,2"`, `"10,3,0.1"`). Order must match; same length; ≥4 pairs. If your CSV is comma-delimited, quote those cells.
+- **`values_as="columns"`** (default): One column per value -- `Data0`..`DataN`, `Conc0`..`ConcN`.
+- **`values_as="list"`**: Two columns -- `Responses` and `Concentrations`. Each cell holds comma-separated values (e.g. `"4000,300,2"`, `"10,3,0.1"`). Order must match; same length; >=4 pairs. If your CSV is comma-delimited, quote those cells.
 
 ```python
 raw_data, _ = sp.load("your_data.csv", values_as="columns")  # default
@@ -81,16 +126,16 @@ For **list** format, use **Responses** and **Concentrations** (comma-separated v
 
 ### Supported concentration units
 
-When using raw data (Path A), `Concentration_Units` is required. All values are converted to **microM** internally. Supported units (case-insensitive), smallest to largest: **fM** (`fm`, `femtom`); **pM** (`pm`, `picom`); **nM** (`nm`, `nanom`); **microM** (`µM`, `um`, `microm`, `micro`); **mM** (`mm`, `millim`); **M** (`m`, `mol`).
+When using raw data (Path A), `Concentration_Units` is required. All values are converted to **microM** internally. Supported units (case-insensitive), smallest to largest: **fM** (`fm`, `femtom`); **pM** (`pm`, `picom`); **nM** (`nm`, `nanom`); **microM** (`uM`, `um`, `microm`, `micro`); **mM** (`mm`, `millim`); **M** (`m`, `mol`).
 
 ### Pre-calculated Parameters (Optional)
 
 If you already have fitted Hill curve parameters:
 - **AC50** or **ec50**: Half-maximal concentration
-- **Upper** or **Infinity**: Upper asymptote
-- **Lower** or **Zero**: Lower asymptote
+- **Zero_asymptote** (or legacy **Lower**/**Zero**): Zero asymptote (response as concentration -> 0)
+- **Inf_asymptote** (or legacy **Upper**/**Infinity**): Inf asymptote (response at saturating concentration)
 - **Hill_Slope** (or **Hill**, **slope**): Hill coefficient
-- **r2** or **R²**: R-squared goodness of fit
+- **r2** or **R^2**: R-squared goodness of fit
 
 ### Rows are literal
 
@@ -102,16 +147,25 @@ Each row is taken as-is. Empty values are treated as null; there is no forward-f
 
 ### From CSV File
 
-Use your own file path, or [download a sample](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv) (raw) / [demo_data_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_precalc.csv) (pre-calculated), then load:
+Use your own file path, or download a sample: [demo_precontrol_normalized_delta.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_precontrol_normalized_delta.csv) (raw, pre-control-normalized) / [demo_precontrol_normalized_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_precontrol_normalized_precalc.csv) (pre-calculated), then load:
 
 ```python
 from sprime import SPrime as sp
 
 # You can download samples from the URLs above, then load your file.
-raw_data, _ = sp.load("your_data.csv")
+# Raw Path A: non-zero Control_Response per row by default, or
+# skip_control_response_normalization=True if already control-normalized.
+raw_data, _ = sp.load(
+    "your_data.csv",
+    response_normalization="asymptote_normalized",
+)
 
 # Or specify an assay name
-raw_data, _ = sp.load("your_data.csv", assay_name="HTS001")
+raw_data, _ = sp.load(
+    "your_data.csv",
+    assay_name="HTS001",
+    response_normalization="asymptote_normalized",
+)
 ```
 
 ### Inspecting Loaded Data
@@ -184,23 +238,23 @@ for profile in screening_data.profiles:
     print(f"{profile.compound.name}: S' = {profile.s_prime:.2f}")
 ```
 
-### Processing option: `allow_overwrite_hill_coefficients`
+### Processing option: `allow_overwrite_precalc_params`
 
-When your CSV has **both** raw dose-response data (DATA*/CONC*) **and** pre-calculated Hill params (AC50, Upper, Lower, Hill_Slope, r2), sprime fits from raw and would overwrite those pre-calc values. By default it **raises** unless you explicitly allow overwriting:
+When your CSV has **both** raw dose-response data (DATA*/CONC*) **and** pre-calculated curve parameters (AC50, Upper/Lower or Zero/Inf asymptotes, Hill_Slope, r2), sprime fits from raw and would overwrite those pre-calc values. By default it **raises** unless you explicitly allow overwriting:
 
 ```python
-# CSV has both raw DATA/CONC and AC50/Upper/Lower columns – allow overwrite
-screening_data, _ = sp.process(raw_data, allow_overwrite_hill_coefficients=True)
+# CSV has both raw DATA/CONC and AC50/Upper/Lower columns - allow overwrite
+screening_data, _ = sp.process(raw_data, allow_overwrite_precalc_params=True)
 ```
 
-- **`allow_overwrite_hill_coefficients=False`** (default): Raise if we would overwrite pre-calc Hill params.
-- **`allow_overwrite_hill_coefficients=True`**: Fit from raw, overwrite pre-calc, and **log a warning** (console + report) that pre-calc was overwritten.
+- **`allow_overwrite_precalc_params=False`** (default): Raise if we would overwrite pre-calculated curve parameters.
+- **`allow_overwrite_precalc_params=True`**: Fit from raw, overwrite pre-calc (EC50, asymptotes, steepness, r^2), and **log a warning** (console + report).
 
 Use `True` when you intentionally want to refit from raw (e.g. demo data, legacy files with both). Same option exists for `get_s_prime_from_data` and `get_s_primes_from_file`.
 
 ### Custom Fitting Parameters
 
-You can pass **curve-fitting** parameters (distinct from `allow_overwrite_hill_coefficients`) to control the Hill fit:
+You can pass **curve-fitting** parameters (distinct from `allow_overwrite_precalc_params`) to control the Hill fit:
 
 ```python
 # Curve-fitting parameters (maxfev, initial_ec50, etc.)
@@ -214,7 +268,7 @@ screening_data, _ = sp.process(
 # When CSV has both raw + pre-calc, allow overwrite and optionally pass fit params
 screening_data, _ = sp.process(
     raw_data,
-    allow_overwrite_hill_coefficients=True,
+    allow_overwrite_precalc_params=True,
     maxfev=10000
 )
 ```
@@ -222,8 +276,8 @@ screening_data, _ = sp.process(
 **Common fitting parameters:**
 - `curve_direction`: `"up"` (increasing), `"down"` (decreasing), or `None` (auto-detect)
 - `maxfev`: Maximum function evaluations (default: 3,000,000)
-- `initial_lower`, `initial_upper`, `initial_ec50`, `initial_hill_coefficient`: Initial parameter guesses
-- `bounds`: Parameter bounds as `([lower_bounds], [upper_bounds])` tuples
+- `initial_zero_asymptote`, `initial_inf_asymptote`, `initial_ec50`, `initial_steepness_coefficient`: Initial parameter guesses
+- `bounds`: Parameter bounds as `([lower_bounds], [upper_bounds])` tuples (per-parameter min/max lists)
 - `zero_replacement`: Value to replace zero concentrations (default: 1e-24)
 
 See [Hill Curve Fitting Configuration](hill_curve_fitting_configuration.md) for all available parameters.
@@ -245,9 +299,9 @@ s_prime = profile.calculate_s_prime()
 
 # Access fitted parameters
 print(f"EC50: {profile.hill_params.ec50}")
-print(f"Upper: {profile.hill_params.upper}")
-print(f"Lower: {profile.hill_params.lower}")
-print(f"R²: {profile.hill_params.r_squared}")
+print(f"Zero asymptote: {profile.hill_params.zero_asymptote}")
+print(f"Inf asymptote: {profile.hill_params.inf_asymptote}")
+print(f"R^2: {profile.hill_params.r_squared}")
 print(f"S': {profile.s_prime}")
 ```
 
@@ -370,9 +424,9 @@ Here's a complete example using the demo data:
 ```python
 from sprime import SPrime as sp
 
-# 1. Load data (use your CSV, or download docs/usage/demo_data_s_prime.csv from the repo)
+# 1. Load data (use your CSV, or download docs/usage/demo_precontrol_normalized_s_prime.csv from the repo)
 print("Loading data...")
-raw_data, _ = sp.load("docs/usage/demo_data_s_prime.csv")
+raw_data, _ = sp.load("docs/usage/demo_precontrol_normalized_s_prime.csv")
 print(f"Loaded {len(raw_data)} profiles")
 
 # 2. Process data (fit curves, calculate S')
@@ -459,10 +513,17 @@ list_of_rows = [
 ]
 
 # Calculate S' values directly from list of dicts
-results = get_s_prime_from_data(list_of_rows)
+results = get_s_prime_from_data(
+    list_of_rows,
+    response_normalization="asymptote_normalized",
+)
 
 # If rows have both raw DATA/CONC and pre-calc AC50/Upper/Lower, allow overwrite:
-# results = get_s_prime_from_data(list_of_rows, allow_overwrite_hill_coefficients=True)
+# results = get_s_prime_from_data(
+#     list_of_rows,
+#     allow_overwrite_precalc_params=True,
+#     response_normalization="asymptote_normalized",
+# )
 
 # Calculate delta S' from list of dicts
 delta_results = calculate_delta_s_prime(
@@ -474,9 +535,11 @@ delta_results = calculate_delta_s_prime(
 
 ## Next Steps
 
+- Skim the [Terminology reference](terminology_reference.md) when a label or pipeline name is unclear
 - Learn about [Hill Curve Fitting Configuration](hill_curve_fitting_configuration.md)
-- Read about [Understanding 4PL Dose-Response Curves](../README_4PL_Dose_Response.md)
-- Review [Background and Concepts](../background_and_concepts.md) for qHTS terminology and S' metric details
+- Read about [Understanding 4PL Dose-Response Curves](../background/README_4PL_Dose_Response.md)
+- Review [Background and Concepts](../background/background_and_concepts.md) for qHTS context and S' metric details
+- Follow the branching narrative in [S' derivation pipeline](../background/s_prime_derivation_pipeline.md)
 
 ## Troubleshooting
 
@@ -484,12 +547,16 @@ delta_results = calculate_delta_s_prime(
 
 Your CSV has **both** raw dose-response columns (Data0..DataN, Conc0..ConcN) **and** pre-calc Hill params (AC50, Upper, Lower, Hill_Slope, r2). By default sprime raises to avoid silently overwriting user-supplied values.
 
-**Fix:** Set `allow_overwrite_hill_coefficients=True` when you intend to refit from raw and overwrite pre-calc:
+**Fix:** Set `allow_overwrite_precalc_params=True` when you intend to refit from raw and overwrite pre-calc:
 
 ```python
-screening_data, _ = sp.process(raw_data, allow_overwrite_hill_coefficients=True)
+screening_data, _ = sp.process(raw_data, allow_overwrite_precalc_params=True)
 # or
-results = get_s_prime_from_data(list_of_rows, allow_overwrite_hill_coefficients=True)
+results = get_s_prime_from_data(
+    list_of_rows,
+    allow_overwrite_precalc_params=True,
+    response_normalization="asymptote_normalized",
+)
 ```
 
 When you allow overwrite, sprime logs a **warning** (console + report) each time pre-calc Hill params are overwritten by fitted values.
@@ -505,15 +572,15 @@ This means a profile has no raw data and no pre-calculated Hill parameters. Ensu
 - Empty or malformed numeric values
 - Insufficient data points (need at least 4 points for 4-parameter fit)
 
-### Low R² Values
+### Low R^2 Values
 
-If curve fits have low R² (< 0.7), consider:
+If curve fits have low R^2 (< 0.7), consider:
 - Checking data quality (outliers, missing points)
 - Ensuring concentrations span the full response range
 - Adjusting initial parameter guesses
 - See [Hill Curve Fitting Configuration](hill_curve_fitting_configuration.md) for options
 
-**Note:** Low R² values may indicate:
+**Note:** Low R^2 values may indicate:
 - Non-sigmoidal dose-response relationship
 - Experimental artifacts or errors
 - Insufficient concentration range
@@ -659,9 +726,9 @@ profile = raw_data.get_profile("DRUG001", "Cell_Line_1")
 if profile:
     profile.hill_params = HillCurveParams(
         ec50=10.0,
-        upper=100.0,
-        lower=0.0,
-        hill_coefficient=1.5,
+        zero_asymptote=0.0,
+        inf_asymptote=100.0,
+        steepness_coefficient=1.5,
         r_squared=0.95
     )
     s_prime = profile.calculate_s_prime()
@@ -788,7 +855,7 @@ from sprime import SPrime as sp, ReportingConfig
 ReportingConfig.configure(log_to_file=True)
 
 raw_data, report = sp.load("data.csv")
-# → Creates "data_processing.log" automatically
+# -> Creates "data_processing.log" automatically
 ```
 
 **Custom Log File Path:**
@@ -802,7 +869,7 @@ ReportingConfig.configure(
 )
 
 raw_data, report = sp.load("data.csv")
-# → Writes to "my_custom_log.log"
+# -> Writes to "my_custom_log.log"
 ```
 
 **Log File Format:**
@@ -831,12 +898,12 @@ from sprime import SPrime as sp, ReportingConfig
 ReportingConfig.configure(log_to_file=True)
 
 raw_data, load_report = sp.load("data.csv")
-# → Console summary printed
-# → Log file written: "data_processing.log"
+# -> Console summary printed
+# -> Log file written: "data_processing.log"
 
 screening_data, process_report = sp.process(raw_data)
-# → Console summary printed
-# → Log file appended/updated
+# -> Console summary printed
+# -> Log file appended/updated
 ```
 
 **Example 3: Verbose Console Output**
@@ -847,7 +914,7 @@ from sprime import SPrime as sp, ReportingConfig, ConsoleOutput
 ReportingConfig.configure(console_output=ConsoleOutput.VERBOSE)
 
 raw_data, report = sp.load("data.csv")
-# → All warnings printed to console with full details
+# -> All warnings printed to console with full details
 ```
 
 **Example 4: Silent Mode (Log File Only)**
@@ -861,8 +928,8 @@ ReportingConfig.configure(
 )
 
 raw_data, report = sp.load("data.csv")
-# → No console output
-# → Log file written: "data_processing.log"
+# -> No console output
+# -> Log file written: "data_processing.log"
 ```
 
 **Example 5: Reset to Defaults**
@@ -871,7 +938,7 @@ from sprime import ReportingConfig
 
 # Reset all settings to defaults
 ReportingConfig.reset()
-# → Console summary enabled, log file disabled
+# -> Console summary enabled, log file disabled
 ```
 
 ### Understanding Warnings
@@ -880,7 +947,7 @@ ReportingConfig.reset()
 - `MISSING_DATA`: Missing required fields (Compound_ID, Cell_Line, insufficient data points)
 - `DATA_QUALITY`: Invalid values, non-numeric data, missing optional fields
 - `NUMERICAL`: NaN/Inf values encountered
-- `CURVE_FIT`: Fitting failures, poor fit quality (R² < 0.7)
+- `CURVE_FIT`: Fitting failures, poor fit quality (R^2 < 0.7)
 - `CALCULATION`: S' calculation failures
 
 **Row Numbers:**
@@ -1023,7 +1090,7 @@ The test suite covers:
 - CSV parsing with various formats
 
 **Integration Tests:**
-- Complete workflows (Load → Process → Analyze)
+- Complete workflows (Load -> Process -> Analyze)
 - Multiple compounds and cell lines
 - Metadata extraction and preservation
 - CSV export functionality
@@ -1068,8 +1135,8 @@ If contributing to sprime, ensure all tests pass before submitting:
 # Run full test suite
 pytest tests/
 
-# Check code style (if configured)
-# flake8 src/ tests/
+# Lint (Ruff -- see docs/background/development.md); use repo root so docs/notebooks are included
+ruff check .
 
 # Run with coverage
 pytest tests/ --cov=src/sprime --cov-report=term-missing

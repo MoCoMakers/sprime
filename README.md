@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Development Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/MoCoMakers/sprime)
 
-**sprime** (S' or S prime) is a Python library for analyzing quantitative high-throughput screening (qHTS) data in preclinical drug discovery studies. The library provides tools for processing dose-response curves, fitting Hill equations, and calculating S' values—a single metric that summarizes a drug's dose-response profile relative to a cell line and assay.
+**sprime** (S' or S prime) is a Python library for analyzing quantitative high-throughput screening (qHTS) data in preclinical drug discovery studies. The library provides tools for processing dose-response curves, fitting Hill equations, and calculating S' values--a single metric that summarizes a drug's dose-response profile relative to a cell line and assay.
 
 ## Overview
 
@@ -20,31 +20,37 @@ sprime enables researchers to:
 
 S' is a single value score that summarizes a drug's dose-response curve. The metric is calculated from Hill curve parameters using the formula:
 
-**S' = asinh((Upper - Lower) / EC50)**
+**S' = asinh((Zero_asymptote - Inf_asymptote) / EC50)**
+
+(If your CSV uses legacy headers **Lower** / **Upper**, map them to **zero_asymptote** / **inf_asymptote** respectively--the numerator is **not** (Inf - Zero).)
 
 This is equivalent to:
 
-$$S' = \ln\left(\frac{\text{Upper} - \text{Lower}}{\text{EC50}} + \sqrt{\left(\frac{\text{Upper} - \text{Lower}}{\text{EC50}}\right)^2 + 1}\right)$$
+$$S' = \ln\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{\text{EC50}} + \sqrt{\left(\frac{\text{Zero\_asymptote} - \text{Inf\_asymptote}}{\text{EC50}}\right)^2 + 1}\right)$$
 
 Where:
-- **Upper** = Upper asymptote of the dose-response curve
-- **Lower** = Lower asymptote of the dose-response curve  
+- **Zero asymptote** = Response as concentration -> 0 (baseline; left of curve)
+- **Inf asymptote** = Response at saturating concentration (right of curve)
 - **EC50** = Half-maximal effect concentration
 
-Higher S' values indicate stronger drug responses (higher efficacy and/or potency). See [Background and Concepts](docs/background_and_concepts.md#the-s-s-prime-metric) for detailed information.
+**Sign is meaningful:** for many inhibition / viability assays the fitted **Zero** asymptote is **above** **Inf**, so the numerator is positive and larger |S'| indicates a stronger combined potency/efficacy signal in that orientation. See [Background and Concepts](docs/background/background_and_concepts.md#the-s-s-prime-metric) for detailed information.
 
 ### Delta S' and Comparative Analysis
 
-**Delta S'** (ΔS') enables quantitative comparison of drug responses between different cell lines within a single assay:
+**Delta S'** enables quantitative comparison of drug responses between different cell lines within a single assay:
 
-**ΔS' = S'(reference cell line) - S'(test cell line)**
+**Delta S' = S'(reference cell line) - S'(test cell line)**
 
 This metric allows researchers to:
 - Compare drug effects across cell lines
 - Rank compounds by selectivity
 - Prioritize drug candidates for further investigation
 
-For detailed information and examples, see [Delta S' for Comparative Analysis](docs/background_and_concepts.md#delta-s-for-comparative-analysis).
+For detailed information and examples, see [Delta S' for Comparative Analysis](docs/background/background_and_concepts.md#delta-s-for-comparative-analysis).
+
+### S' pipeline branches (raw vs pre-calculated, controls, normalization)
+
+**Path A** = raw dose–response points; **Path B** = pre-calculated Hill parameters. For raw data, **`process`** can apply **response ÷ `Control_Response`** and then **`response_normalization`** (`asymptote_normalized` vs `response_scale`), depending on flags you set at **`load`**. For the full picture (when to skip control ratio, precalc-only rows, module names, and reference fixtures), see **[Basic Usage Guide — S' derivation pipeline (branches)](docs/usage/basic_usage_guide.md#s-derivation-pipeline-branches)**; run-through: **[`demonstration.ipynb`](docs/usage/demonstration.ipynb)**; theory: **[S' derivation pipeline](docs/background/s_prime_derivation_pipeline.md)**.
 
 This library implements **Generation 2** of the S' methodology, which evolved from the original S metric. See the [Citation](#citation) section below for references.
 
@@ -89,79 +95,127 @@ python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -e ".[dev]"
 pytest tests/
+ruff check .              # lint from repo root (includes docs/); see Development guide
 pre-commit install        # optional: rebuild + stage pdoc_html on commit when .py changes
 ```
 
-See **[Development guide](docs/development.md)** for full setup, pre-commit, API docs, and CI.
+See **[Development guide](docs/background/development.md)** for full setup, pre-commit, API docs, and CI.
 
 ## Quick Start
 
-The basic workflow in sprime is: **Load** raw data from CSV → **Process** (fit curves, calculate S') → **Analyze** (e.g. delta S' for comparative analysis).
+The basic workflow in sprime is: **Load** raw data from CSV -> **Process** (fit curves, calculate S') -> **Analyze** (e.g. delta S' for comparative analysis).
+
+### Jupyter / IPython: same workflow, runnable cells
+
+> **Skip ahead to code if you like.** In a clone of the repo, open **[`docs/usage/demonstration.ipynb`](docs/usage/demonstration.ipynb)** in **Jupyter** or **VS Code** (IPython kernel).
 
 **Three ways to load data:**
 
 | Path | `values_as` | Your data | Required columns | What sprime does |
 |------|-------------|-----------|------------------|------------------|
-| **A — Raw (columns)** | `"columns"` | `DATA0`..`DATAN`, `CONC0`..`CONCN` (one column per value) | `Cell_Line`, `Compound_ID`, `Concentration_Units` | Fits Hill equation coefficients and stats → AC50, Upper, Lower, Hill Slope, r² → S' |
-| **A — Raw (list)** | `"list"` | `Responses`, `Concentrations` (comma-separated in one cell each) | `Cell_Line`, `Compound_ID`, `Concentration_Units` | Same as above |
-| **B — Pre-calculated** | N/A | `AC50`, `Upper`, `Lower` (optional: Hill Slope, r2, S', etc.) | `Cell_Line`, `Compound_ID` | Uses params as-is; always computes S' (warns if S' was provided) |
+| **A -- Raw (columns)** | `"columns"` | `DATA0`..`DATAN`, `CONC0`..`CONCN` (one column per value) | `Cell_Line`, `Compound_ID`, `Concentration_Units`, **`Control_Response`** (unless `skip_control_response_normalization=True`) | Validates layout; in **`process`**, optionally **÷ `Control_Response`** then **`response_normalization`**, then Hill fit → S'. |
+| **A -- Raw (list)** | `"list"` | `Responses`, `Concentrations` (comma-separated in one cell each) | Same as columns path for raw | Same as columns path |
+| **B -- Pre-calculated** | N/A | `AC50`, `Upper`, `Lower` (optional: Hill Slope, r2, S', etc.) | `Cell_Line`, `Compound_ID` | Uses imported Hill params; **no** vehicle ratio on precalc-only rows. Always recomputes S' from params (warns if S' was provided when raw refit overwrites). |
+
+**Vehicle ratio and `response_normalization` (matches [`demonstration.ipynb`](docs/usage/demonstration.ipynb))**
+
+| Situation | **÷ `Control_Response` at `process`?** | **`response_normalization`** (after ratio, **raw rows only**) |
+|-----------|----------------------------------------|---------------------------------------------------------------|
+| Path A, **`skip_control_response_normalization=False`** (default) | **Yes** — test response **÷** vehicle readout, then pipeline step | Required on **`load`**: **`asymptote_normalized`** = ratio then **max → 1** then ×100; **`response_scale`** = ratio then ×100 only. |
+| Path A, **`skip_control_response_normalization=True`** | **No** — values already post-control | Still required on **`load`**; documents scale; no ratio re-applied. |
+| Path B (rows with **only** precalc params) | **N/A** — no dose points to scale | Still required on **`load`**; unused unless the file also has raw curves. |
 
 Use **Path A (columns)** by default (`values_as="columns"`). Use **Path A (list)** with `sp.load(..., values_as="list")` when your data has `Responses` and `Concentrations` as comma-separated values. For list format, if the CSV is comma-delimited, quote those cells (e.g. `"4000,300,2"`). Any non-reserved columns in your CSV (e.g. MOA, assay_timescale) propagate forward by default into S' output and the master CSV export.
 
-### Path A — Raw data
+### Path A -- Raw data
 
 **Templates:** [template_raw.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw.csv) (columns), [template_raw_list.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_raw_list.csv) (list). See [Required headings](#required-headings) below.
 
-The **load** call changes with format; **process** does not. You must pass `values_as="columns"` (default) or `values_as="list"` — format is not auto-detected from headings.
+The **load** call changes with format; **process** does not. You must pass `values_as="columns"` (default) or `values_as="list"` -- format is not auto-detected from headings.
 
-Run from the directory containing the demo CSVs (e.g. `docs/usage/`), or use paths like `docs/usage/demo_data_s_prime.csv`.
+Run from the directory containing the demo CSVs (e.g. `docs/usage/`), or use paths like `docs/usage/demo_precontrol_normalized_s_prime.csv`.
 
-**Option 1 — Columns** (DATA0..N, CONC0..N)
+**Path A import flags (see notebook *Import-time choices*):**
+
+- **`skip_control_response_normalization=False`** (default): each raw row needs a **non-empty, non-zero** **`Control_Response`**; **`process`** applies **response ÷ Control_Response** (then **`response_normalization`**).
+- **`skip_control_response_normalization=True`**: responses are **already** on the post-control analysis scale (e.g. empty **`Control_Response`** on those rows); **`process`** does **not** re-divide; still pass **`response_normalization`** on **`load`** to document the scale.
+
+**Demo families:**
+
+- **`demo_precontrol_normalized_*`**: upstream already applied control + reference scaling. Use **`skip_control_response_normalization=True`**, **`response_normalization="asymptote_normalized"`** (or **`response_scale`** if that matches your sheet).
+- **`demo_raw_vehicle_control_*`**: raw **% nucleus** + **`Control_Response`** = **35.3** (DMSO row in **`tests/fixtures/SPrime_variation_reference.csv`**). Use **defaults** for skip and set **`response_normalization`** to match the lab (*Normalized* vs *Nonnormalized* x100).
+
+**Option 1 -- Columns** (DATA0..N, CONC0..N), pre-control-normalized demo
 
 ```python
 from sprime import SPrime as sp
 
 # Download (columns), then save locally:
-# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_s_prime.csv
-# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv
-# Demo files include both raw DATA/CONC and pre-calc params; refit from raw.
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_precontrol_normalized_s_prime.csv
+# Demo files may include both raw DATA/CONC and pre-calc params; refit from raw with allow_overwrite_precalc_params=True.
 
-raw_data, _ = sp.load("demo_data_s_prime.csv", values_as="columns")
-screening_data, _ = sp.process(raw_data, allow_overwrite_hill_coefficients=True)
+raw_data, _ = sp.load(
+    "demo_precontrol_normalized_s_prime.csv",
+    values_as="columns",
+    skip_control_response_normalization=True,
+    response_normalization="asymptote_normalized",
+)
+screening_data, _ = sp.process(raw_data, allow_overwrite_precalc_params=True)
 screening_data.export_to_csv("master_s_prime_table.csv")
 results = screening_data.to_dict_list()
 for profile in results:
     print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
 ```
 
-**Option 2 — List** (Responses, Concentrations as comma-separated per cell)
+**Raw + vehicle (DMSO ratio in `process`)** — same idea as **Route 1** in [`demonstration.ipynb`](docs/usage/demonstration.ipynb); try **`demo_raw_vehicle_control_s_prime.csv`** (columns) or **`demo_raw_vehicle_control_raw_list.csv`** (list).
 
 ```python
 from sprime import SPrime as sp
 
-# Download (list), then save locally:
-# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_raw_list.csv
-
-raw_data, _ = sp.load("demo_data_raw_list.csv", values_as="list")
+raw_data, _ = sp.load(
+    "demo_raw_vehicle_control_s_prime.csv",
+    values_as="columns",
+    # skip_control_response_normalization=False is default
+    response_normalization="asymptote_normalized",
+)
 screening_data, _ = sp.process(raw_data)
+```
+
+**Option 2 -- List** (quoted comma-separated `Responses` / `Concentrations`)
+
+```python
+from sprime import SPrime as sp
+
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_precontrol_normalized_raw_list.csv
+
+raw_data, _ = sp.load(
+    "demo_precontrol_normalized_raw_list.csv",
+    values_as="list",
+    skip_control_response_normalization=True,
+    response_normalization="asymptote_normalized",
+)
+screening_data, _ = sp.process(raw_data, allow_overwrite_precalc_params=True)
 screening_data.export_to_csv("master_s_prime_table.csv")
 results = screening_data.to_dict_list()
 for profile in results:
     print(f"{profile['compound_name']} vs {profile['cell_line']}: S' = {profile['s_prime']:.2f}")
 ```
 
-### Path B — Pre-calculated
+### Path B -- Pre-calculated
 
-**Sample file:** [demo_data_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_precalc.csv)  
+**Sample file:** [demo_precontrol_normalized_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_precontrol_normalized_precalc.csv)  
 **Template:** [template_precalc.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/template_precalc.csv)
 
 ```python
 from sprime import SPrime as sp
 
 # Download, then save locally:
-# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_precalc.csv
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_precontrol_normalized_precalc.csv
 
-raw_data, _ = sp.load("demo_data_precalc.csv")
+raw_data, _ = sp.load(
+    "demo_precontrol_normalized_precalc.csv",
+    response_normalization="asymptote_normalized",  # required on every load; no effect if no raw rows
+)
 screening_data, _ = sp.process(raw_data)
 screening_data.export_to_csv("master_s_prime_table.csv")
 results = screening_data.to_dict_list()
@@ -171,18 +225,24 @@ for profile in results:
 
 ### Delta S' example
 
-Compare drug responses between reference and test cell lines (e.g. non-tumor vs tumor). Delta S' = S'(reference) − S'(test); more negative = more effective in test tissue.
+Compare drug responses between reference and test cell lines (e.g. non-tumor vs tumor). Delta S' = S'(reference) - S'(test); more negative = more effective in test tissue.
 
-**Demo CSV (two cell lines):** [demo_data_delta.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv)
+**Demo CSV (two cell lines, pre-control-normalized):** [demo_precontrol_normalized_delta.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_precontrol_normalized_delta.csv)  
+**Demo CSV (raw % nucleus + DMSO 35.3):** [demo_raw_vehicle_control_delta.csv](https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_raw_vehicle_control_delta.csv)
 
 ```python
 from sprime import SPrime as sp, ScreeningDataset
 
 # Download, then save locally:
-# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_data_delta.csv
+# https://raw.githubusercontent.com/MoCoMakers/sprime/refs/heads/main/docs/usage/demo_precontrol_normalized_delta.csv
 
-raw_data, _ = sp.load("demo_data_delta.csv", values_as="columns")
-screening_data, _ = sp.process(raw_data, allow_overwrite_hill_coefficients=True)
+raw_data, _ = sp.load(
+    "demo_precontrol_normalized_delta.csv",
+    values_as="columns",
+    skip_control_response_normalization=True,  # pre-control-normalized rows; empty Control_Response cells
+    response_normalization="asymptote_normalized",
+)
+screening_data, _ = sp.process(raw_data, allow_overwrite_precalc_params=True)
 screening_data.export_to_csv("master_s_prime_table.csv")
 
 delta_results = screening_data.calculate_delta_s_prime(
@@ -191,7 +251,7 @@ delta_results = screening_data.calculate_delta_s_prime(
 )
 # Opt-in: add compound-level columns (1:1 in ref & test) to delta output and export:
 #   headings_one_to_one_in_ref_and_test=["assay_timescale"],  # etc.
-#   source_profile="test",   # "ref" or "test" — which profile to use for those values
+#   source_profile="test",   # "ref" or "test" -- which profile to use for those values
 # Pass the same list to export_delta_s_prime_to_csv(..., headings_one_to_one_in_ref_and_test=[...])
 ScreeningDataset.export_delta_s_prime_to_csv(delta_results, "delta_s_prime_table.csv")
 
@@ -206,22 +266,23 @@ for ref_cl, comparisons in delta_results.items():
 - **Path A (raw):** **`Concentration_Units`** (required). Either **(columns)** `DATA0`..`DATA N`, `CONC0`..`CONC N` (same N), or **(list)** `Responses` and `Concentrations` (comma-separated values in one cell each). Use `values_as="columns"` (default) or `values_as="list"`. See [Supported concentration units](#supported-concentration-units) below.
 - **Path B (pre-calc):** `AC50` (or `ec50`), `Upper` (or `Infinity`), `Lower` (or `Zero`). Optional: `Hill_Slope`, `r2`, `S'`.
 
-Template files list the exact headers (required columns first); your CSV should match those. Column order in the file does not matter—matching is by header name only.
+Template files list the exact headers (required columns first); your CSV should match those. Column order in the file does not matter--matching is by header name only.
 
 ### Supported concentration units
 
-For Path A (raw), `Concentration_Units` must be present. All values are converted to **microM** internally. Supported units (case-insensitive), smallest to largest: **fM** (`fm`, `femtom`); **pM** (`pm`, `picom`); **nM** (`nm`, `nanom`); **microM** (`µM`, `um`, `microm`, `micro`); **mM** (`mm`, `millim`); **M** (`m`, `mol`).
+For Path A (raw), `Concentration_Units` must be present. All values are converted to **microM** internally. Supported units (case-insensitive), smallest to largest: **fM** (`fm`, `femtom`); **pM** (`pm`, `picom`); **nM** (`nm`, `nanom`); **microM** (`uM`, `um`, `microm`, `micro`); **mM** (`mm`, `millim`); **M** (`m`, `mol`).
 
 ### Next steps
 
+- **Terms and pipeline names:** [Terminology reference](docs/usage/terminology_reference.md)
 - **Format details:** [Basic Usage Guide](docs/usage/basic_usage_guide.md)
-- **Run all scenarios:** [Demo](docs/usage/demo.py)
+- **Hands-on examples:** clone the repo (or copy [`docs/usage/`](docs/usage/) from GitHub) and open **[`demonstration.ipynb`](docs/usage/demonstration.ipynb)** beside the `demo_*.csv` files (demos are not shipped inside the PyPI wheel)
 - **Individual profiles & pre-calculated parameters:** [Basic Usage Guide](docs/usage/basic_usage_guide.md) (*Processing Individual Profiles*, *Creating dose-response profiles from scratch*, *Working with Pre-calculated Hill Parameters*)
 
 ## Key Features
 
 - **Automatic Curve Fitting**: Fits four-parameter logistic (Hill) curves to dose-response data
-- **Flexible Input**: Supports raw dose-response data or pre-calculated Hill parameters. When both exist, use `allow_overwrite_hill_coefficients=True` to refit from raw; overwrites are logged as warnings.
+- **Flexible Input**: Supports raw dose-response data or pre-calculated Hill parameters. When both exist, use `allow_overwrite_precalc_params=True` to refit from raw; overwrites are logged as warnings.
 - **CSV Loading**: Handles common screening data formats; rows are literal (empty = null, no forward-filling)
 - **Delta S' Analysis**: Compare drug responses across cell lines within a single assay
 - **CSV Export**: Built-in methods to export results and delta S' comparisons to CSV
@@ -235,21 +296,22 @@ For Path A (raw), `Concentration_Units` must be present. All values are converte
 ### Getting Started
 
 - **[API Reference](https://mocomakers.github.io/sprime/)** - API documentation (generated from docstrings)
-- **[Basic Usage Guide](docs/usage/basic_usage_guide.md)** - Comprehensive step-by-step guide to using sprime with your data, including advanced usage patterns and testing
+- **[Basic Usage Guide](docs/usage/basic_usage_guide.md)** - Step-by-step guide: formats, `load`/`process`, delta S', exports, testing
+- **[Terminology reference](docs/usage/terminology_reference.md)** - Plain-language definitions for screening jargon and sprime-specific pipeline names (`Control_Response`, asymptote-normalized vs response-scale, etc.)
 
 ### Core Concepts
 
-- **[Background and Concepts](docs/background_and_concepts.md)** - Introduction to qHTS, assays, S' metric, and key terminology
-- **[Understanding 4PL Dose-Response Curves](docs/README_4PL_Dose_Response.md)** - Detailed explanation of the Hill equation model
+- **[Background and Concepts](docs/background/background_and_concepts.md)** - Introduction to qHTS, assays, S' metric, and key terminology (see also the [terminology reference](docs/usage/terminology_reference.md) for a compact glossary)
+- **[Understanding 4PL Dose-Response Curves](docs/background/README_4PL_Dose_Response.md)** - Detailed explanation of the Hill equation model
 
 ### Technical Documentation
 
 - **[Hill Curve Fitting Configuration](docs/usage/hill_curve_fitting_configuration.md)** - Technical details on curve fitting parameters and configuration options
-- **[Development guide](docs/development.md)** - Dev setup, tests, pre-commit, API docs, CI (for contributors)
+- **[Development guide](docs/background/development.md)** - Dev setup, tests, pre-commit, API docs, CI (for contributors)
 
 ### Examples
 
-- **[Demo Script](docs/usage/demo.py)** - Consolidated demo: S' only (raw -> Hill -> S'), pre-calc only (bypass raw data), and Delta S' (raw -> Hill -> S' -> delta, export tables)
+- **[demonstration.ipynb](docs/usage/demonstration.ipynb)** -- Jupyter walkthrough (load/process, ΔS′, optional CSV export); run from a clone with `docs/usage` and demo CSVs available (not inside `pip install` alone).
 
 ## Requirements
 
@@ -273,7 +335,10 @@ Development dependencies are optional and only needed if you plan to contribute 
   - Helps ensure comprehensive test coverage during development
 
 - **pdoc3** - Generates API docs from docstrings into `pdoc_html/`
-- **pre-commit** - Optional; rebuilds `pdoc_html` before each commit when `.py` files change
+- **ruff** >= 0.3.0 - Lint and format (`ruff check .`, `ruff format .` from repo root—includes `docs/` e.g. notebooks); configuration in `pyproject.toml`
+- **pre-commit** - Optional Git hooks: runs **ruff** and rebuilds **`pdoc_html`** when Python files change (see `.pre-commit-config.yaml`)
+
+The full `[dev]` set is defined in **`pyproject.toml`** (`[project.optional-dependencies]`).
 
 **Install development dependencies:**
 ```bash
@@ -306,7 +371,7 @@ See the [Basic Usage Guide](docs/usage/basic_usage_guide.md#running-the-test-sui
 
 ### API docs (pdoc_html)
 
-API docs live in `pdoc_html/` in the repo and are built from docstrings. The [API Reference](https://mocomakers.github.io/sprime/) on GitHub Pages is deployed from CI. Build locally: `python -m pdoc --html --output-dir pdoc_html --force sprime`. Optional: `pre-commit install` rebuilds and stages `pdoc_html` on commit when `.py` files change. See [Development guide](docs/development.md) for details.
+API docs live in `pdoc_html/` in the repo and are built from docstrings. The [API Reference](https://mocomakers.github.io/sprime/) on GitHub Pages is deployed from CI. Build locally: `python -m pdoc --html --output-dir pdoc_html --force sprime`. Optional: `pre-commit install` rebuilds and stages `pdoc_html` on commit when `.py` files change. See [Development guide](docs/background/development.md) for details.
 
 ## Project Status
 
@@ -336,16 +401,16 @@ Contributions are welcome! We appreciate your help in making sprime better.
 
 1. **Fork the repository** on GitHub
 2. **Create a feature branch** (`git checkout -b feature/amazing-feature`)
-3. **Set up dev environment** — venv, `pip install -e ".[dev]"`, `pytest tests/`, optionally `pre-commit install`. See [Development guide](docs/development.md).
+3. **Set up dev environment** -- venv, `pip install -e ".[dev]"`, `pytest tests/`, optionally `pre-commit install`. See [Development guide](docs/background/development.md).
 4. **Make your changes** and add tests if applicable
-5. **Run the test suite** — `pytest tests/`
+5. **Run the test suite** -- `pytest tests/`
 6. **Commit your changes** (`git commit -m 'Add amazing feature'`). If you use pre-commit, the pdoc hook will rebuild and stage `pdoc_html` when you change `.py` files.
 7. **Push to the branch** (`git push origin feature/amazing-feature`)
 8. **Open a Pull Request**
 
 ### Development Guidelines
 
-- Follow PEP 8 style guidelines
+- Use **Ruff** as in **`pyproject.toml`** -- see [Development guide](docs/background/development.md#linting-and-formatting-ruff); run **`ruff check .`** before commit so it matches what **pre-commit** can flag (including under **`docs/`**)
 - Add tests for new features
 - Update documentation as needed
 - Ensure all tests pass before submitting
@@ -400,7 +465,7 @@ Copyright (C) 2026 MoCo Maker Labs LLC
 
 ## Support
 
-- **Documentation**: See the [docs](docs/) directory for comprehensive guides
+- **Documentation**: [Usage docs](docs/usage/README.md) (guides, demos) * [Background / theory](docs/background/README.md) (derivation, 4PL, development). For **vocabulary**, see [Terminology reference](docs/usage/terminology_reference.md). For S' **pipeline branches**, start with [S' derivation pipeline](docs/background/s_prime_derivation_pipeline.md) Sec.3.4 (**validation vs `response_pipeline`**).
 - **Issues**: Report bugs or request features on [GitHub Issues](https://github.com/MoCoMakers/sprime/issues)
 - **Contact**: Reach out via [MoCo Makers Contact](https://www.mocomakers.com/contact/)
 

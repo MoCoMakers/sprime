@@ -1,0 +1,2 @@
+Compound_ID,Cell_Line,Concentration_Units,Control_Response,Responses,Concentrations,Compound Name,Target,MoA
+"DEMO-17-AAG-NF2","NF2-/-","microM","35.3","41.24,40.86,38.78,38.38,6.64,0.94,0,0","0.003,0.01,0.03,0.1,0.3,1,3,10","17-AAG (demo)",HSP90,HSP90 inhibitor

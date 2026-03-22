@@ -37,8 +37,19 @@ el.replaceWith(d);
 </header>
 <section id="section-intro">
 <p>Hill curve fitting module for sprime.</p>
-<p>Implements four-parameter logistic (4PL) regression for fitting dose-response curves.
-Adapted to work with sprime's domain entities.</p>
+<p>Implements a <strong>linear-x four-parameter logistic (linear-x 4PL)</strong> model: the independent
+variable is concentration x on a linear scale, entering as (x / EC50) in the denominator.
+This matches forms such as AAT Bioquest and generic <code>(x/C)^B</code> calculators.</p>
+<p>Industry note: "Hill equation" and "4PL" are not standardized. Many tools (e.g. SigmaPlot,
+GraphPad-style log-dose forms) use a <strong>log-x 4PL</strong> where the dose axis is log10(concentration),
+which yields different Hill slope sign conventions for the same curve. Our slope values are
+numerically consistent with the linear-x parameterization; compare log-x vs linear-x in
+<code>docs/background/README_4PL_Dose_Response.md#linear-x-vs-log-x-4pl-hill-slope</code>.</p>
+<p><strong>Naming:</strong> The exponent <em>n</em> in <code>(x/EC50)^n</code> is exposed as <code>steepness_coefficient</code> (and
+<code>initial_steepness_coefficient</code> for guesses). That is the same role as the classical <strong>Hill
+coefficient</strong> <em>n</em> in linear-x Hill formulations; we avoid the name <code>hill_coefficient</code> here
+so it is not confused with log-x "Hill slope" outputs from other packages.</p>
+<p>Adapted to work with sprime's domain entities.</p>
 </section>
 <section>
 </section>
@@ -48,7 +59,7 @@ Adapted to work with sprime's domain entities.</p>
 <h2 class="section-title" id="header-functions">Functions</h2>
 <dl>
 <dt id="sprime.hill_fitting.fit_hill_curve"><code class="name flex">
-<span>def <span class="ident">fit_hill_curve</span></span>(<span>concentrations: List[float],<br>responses: List[float],<br>*,<br>initial_lower: float | None = None,<br>initial_upper: float | None = None,<br>initial_ec50: float | None = None,<br>initial_hill_coefficient: float | None = None,<br>curve_direction: str | None = None,<br>maxfev: int = 3000000,<br>zero_replacement: float = 1e-24,<br>bounds: Tuple[List[float], List[float]] | None = None,<br>**curve_fit_kwargs)</span>
+<span>def <span class="ident">fit_hill_curve</span></span>(<span>concentrations: List[float],<br>responses: List[float],<br>*,<br>initial_zero_asymptote: float | None = None,<br>initial_inf_asymptote: float | None = None,<br>initial_ec50: float | None = None,<br>initial_steepness_coefficient: float | None = None,<br>curve_direction: str | None = None,<br>maxfev: int = 3000000,<br>zero_replacement: float = 1e-24,<br>bounds: Tuple[List[float], List[float]] | None = None,<br>**curve_fit_kwargs)</span>
 </code></dt>
 <dd>
 <details class="source">
@@ -60,10 +71,10 @@ Adapted to work with sprime's domain entities.</p>
     responses: List[float],
     *,
     # Initial parameter guesses (all optional with defaults)
-    initial_lower: Optional[float] = None,
-    initial_upper: Optional[float] = None,
+    initial_zero_asymptote: Optional[float] = None,
+    initial_inf_asymptote: Optional[float] = None,
     initial_ec50: Optional[float] = None,
-    initial_hill_coefficient: Optional[float] = None,
+    initial_steepness_coefficient: Optional[float] = None,
     # Curve direction
     curve_direction: Optional[str] = None,  # &#34;up&#34;, &#34;down&#34;, or None for auto-detect
     # Optimization parameters
@@ -73,87 +84,91 @@ Adapted to work with sprime's domain entities.</p>
     # Parameter bounds (optional)
     bounds: Optional[Tuple[List[float], List[float]]] = None,
     # Additional scipy.optimize.curve_fit parameters
-    **curve_fit_kwargs
+    **curve_fit_kwargs,
 ):
     &#34;&#34;&#34;
     Fit four-parameter Hill equation to dose-response data.
-    
+
     Fits a sigmoidal curve to concentration-response data and returns
     HillCurveParams with fitted parameters.
-    
+
     Args:
         concentrations: List of concentration values
         responses: List of response values (must match length of concentrations)
-        initial_lower: Initial guess for lower asymptote (default: auto-estimated)
-        initial_upper: Initial guess for upper asymptote (default: auto-estimated)
+        initial_zero_asymptote: Initial guess for zero asymptote (default: auto-estimated)
+        initial_inf_asymptote: Initial guess for inf asymptote (default: auto-estimated)
         initial_ec50: Initial guess for EC50 (default: auto-estimated)
-        initial_hill_coefficient: Initial guess for Hill coefficient (default: auto-estimated)
-        curve_direction: Curve direction - &#34;up&#34; (increasing), &#34;down&#34; (decreasing), 
-                        or None for auto-detect (tries both, selects best R²)
+        initial_steepness_coefficient: Initial guess for steepness coefficient n (default: auto-estimated)
+        curve_direction: Curve direction - &#34;up&#34; (increasing), &#34;down&#34; (decreasing),
+                        or None for auto-detect (tries both, selects best r-squared)
         maxfev: Maximum function evaluations for optimization (default: 3,000,000)
         zero_replacement: Value to replace zero concentrations (default: 1e-24)
         bounds: Optional parameter bounds as (lower_bounds, upper_bounds) tuples
-                Format: ([lower_min, hill_min, ec50_min, upper_min], 
-                        [lower_max, hill_max, ec50_max, upper_max])
+                Format: ([zero_asymptote_min, steepness_min, ec50_min, inf_asymptote_min],
+                        [zero_asymptote_max, steepness_max, ec50_max, inf_asymptote_max])
         **curve_fit_kwargs: Additional arguments passed to scipy.optimize.curve_fit
-        
+
     Returns:
-        HillCurveParams: Fitted curve parameters with R²
-        
+        HillCurveParams: Fitted curve parameters with r-squared
+
     Raises:
         ValueError: If inputs are invalid
         RuntimeError: If curve fitting fails
         ImportError: If numpy/scipy are not installed
     &#34;&#34;&#34;
-    # Import here to avoid circular import
-    from .sprime import HillCurveParams
-    
-    try:
-        import numpy as np
-        from scipy.optimize import curve_fit
-    except ImportError as e:
-        raise ImportError(
-            &#34;Hill curve fitting requires scipy. &#34;
-            &#34;Install with: pip install scipy&#34;
-        ) from e
-    
+    if np is None or curve_fit is None:
+        raise ImportError(&#34;Hill curve fitting requires scipy. &#34; &#34;Install with: pip install scipy&#34;)
+
     # Validate inputs
     if len(concentrations) != len(responses):
         raise ValueError(&#34;Concentrations and responses must have same length&#34;)
-    
+
     if len(concentrations) &lt; 4:
         raise ValueError(&#34;Need at least 4 data points to fit 4-parameter Hill equation&#34;)
-    
+
     # Convert to numpy arrays (make copies to avoid modifying originals)
     concentrations = list(concentrations)
     responses = list(responses)
-    
+
     # Sort data if needed (ascending concentrations)
     if concentrations[0] &gt; concentrations[-1]:
         concentrations.reverse()
         responses.reverse()
-    
+
     # Handle zero concentrations
     if concentrations[0] == 0:
         concentrations[0] = zero_replacement
-    
+
     x_data = np.array(concentrations)
     y_data = np.array(responses)
-    
+
     # Auto-detect or use specified curve direction
     if curve_direction is None:
         # Try both directions, return best fit
         return _fit_with_auto_direction(
-            x_data, y_data,
-            initial_lower, initial_upper, initial_ec50, initial_hill_coefficient,
-            maxfev, bounds, **curve_fit_kwargs
+            x_data,
+            y_data,
+            initial_zero_asymptote,
+            initial_inf_asymptote,
+            initial_ec50,
+            initial_steepness_coefficient,
+            maxfev,
+            bounds,
+            **curve_fit_kwargs,
         )
     else:
         # Fit with specified direction
         return _fit_single_direction(
-            x_data, y_data, curve_direction,
-            initial_lower, initial_upper, initial_ec50, initial_hill_coefficient,
-            maxfev, bounds, **curve_fit_kwargs
+            x_data,
+            y_data,
+            curve_direction,
+            initial_zero_asymptote,
+            initial_inf_asymptote,
+            initial_ec50,
+            initial_steepness_coefficient,
+            maxfev,
+            bounds,
+            **curve_fit_kwargs,
         )</code></pre>
 </details>
 <div class="desc"><p>Fit four-parameter Hill equation to dose-response data.</p>
@@ -165,32 +180,32 @@ HillCurveParams with fitted parameters.</p>
 <dd>List of concentration values</dd>
 <dt><strong><code>responses</code></strong></dt>
 <dd>List of response values (must match length of concentrations)</dd>
-<dt><strong><code>initial_lower</code></strong></dt>
-<dd>Initial guess for lower asymptote (default: auto-estimated)</dd>
-<dt><strong><code>initial_upper</code></strong></dt>
-<dd>Initial guess for upper asymptote (default: auto-estimated)</dd>
+<dt><strong><code>initial_zero_asymptote</code></strong></dt>
+<dd>Initial guess for zero asymptote (default: auto-estimated)</dd>
+<dt><strong><code>initial_inf_asymptote</code></strong></dt>
+<dd>Initial guess for inf asymptote (default: auto-estimated)</dd>
 <dt><strong><code>initial_ec50</code></strong></dt>
 <dd>Initial guess for EC50 (default: auto-estimated)</dd>
-<dt><strong><code>initial_hill_coefficient</code></strong></dt>
-<dd>Initial guess for Hill coefficient (default: auto-estimated)</dd>
+<dt><strong><code>initial_steepness_coefficient</code></strong></dt>
+<dd>Initial guess for steepness coefficient n (default: auto-estimated)</dd>
 <dt><strong><code>curve_direction</code></strong></dt>
 <dd>Curve direction - "up" (increasing), "down" (decreasing),
-or None for auto-detect (tries both, selects best R²)</dd>
+or None for auto-detect (tries both, selects best r-squared)</dd>
 <dt><strong><code>maxfev</code></strong></dt>
 <dd>Maximum function evaluations for optimization (default: 3,000,000)</dd>
 <dt><strong><code>zero_replacement</code></strong></dt>
 <dd>Value to replace zero concentrations (default: 1e-24)</dd>
 <dt><strong><code>bounds</code></strong></dt>
 <dd>Optional parameter bounds as (lower_bounds, upper_bounds) tuples
-Format: ([lower_min, hill_min, ec50_min, upper_min],
-[lower_max, hill_max, ec50_max, upper_max])</dd>
+Format: ([zero_asymptote_min, steepness_min, ec50_min, inf_asymptote_min],
+[zero_asymptote_max, steepness_max, ec50_max, inf_asymptote_max])</dd>
 <dt><strong><code>**curve_fit_kwargs</code></strong></dt>
 <dd>Additional arguments passed to scipy.optimize.curve_fit</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <dl>
 <dt><code>HillCurveParams</code></dt>
-<dd>Fitted curve parameters with R²</dd>
+<dd>Fitted curve parameters with r-squared</dd>
 </dl>
 <h2 id="raises">Raises</h2>
 <dl>
@@ -203,55 +218,66 @@ Format: ([lower_min, hill_min, ec50_min, upper_min],
 </dl></div>
 </dd>
 <dt id="sprime.hill_fitting.hill_equation"><code class="name flex">
-<span>def <span class="ident">hill_equation</span></span>(<span>x, lower: float, hill_coefficient: float, ec50: float, upper: float)</span>
+<span>def <span class="ident">hill_equation</span></span>(<span>x,<br>zero_asymptote: float,<br>steepness_coefficient: float,<br>ec50: float,<br>inf_asymptote: float)</span>
 </code></dt>
 <dd>
 <details class="source">
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def hill_equation(x, lower: float, hill_coefficient: float, ec50: float, upper: float):
+<pre><code class="python">def hill_equation(
+    x, zero_asymptote: float, steepness_coefficient: float, ec50: float, inf_asymptote: float
+):
     &#34;&#34;&#34;
-    Four-parameter Hill equation (4PL model).
-    
-    Formula: y = D + (A - D) / (1 + (x/C)^n)
-    Where:
-        A = upper (upper asymptote)
-        D = lower (lower asymptote)  
-        C = ec50 (half-maximal concentration)
-        n = hill_coefficient (slope/steepness)
-    
+    Linear-x four-parameter logistic (linear-x 4PL) Hill form.
+
+    Response vs concentration x (linear scale, same units as EC50):
+
+        y = inf_asymptote + (zero_asymptote - inf_asymptote) / (1 + (x / C)^n)
+
+    At concentration approaching zero, y approaches zero_asymptote; at saturating concentration,
+    y approaches inf_asymptote. C = ec50, n = steepness_coefficient. Signed n encodes curve direction
+    together with asymptote ordering; this is not interchangeable with log-x 4PL slope reporting.
+
     Args:
-        x: Concentration values
-        lower: Lower asymptote (A parameter)
-        hill_coefficient: Hill coefficient/slope (n parameter)
-        ec50: Half-maximal concentration (C parameter)
-        upper: Upper asymptote (D parameter)
-        
+        x: Concentration values (linear scale)
+        zero_asymptote: Response as concentration -&gt; 0 (left side of dose axis)
+        steepness_coefficient: Exponent n in (x/C)^n. Conceptually the same quantity often called
+            the **Hill coefficient** in linear-x dose-response formulations (cooperativity exponent);
+            we use ``steepness_coefficient`` here to avoid confusion with log-x tools that report a
+            different &#34;Hill slope&#34; (see module docstring).
+        ec50: Half-maximal concentration C
+        inf_asymptote: Response at saturating concentration (right of dose axis)
+
     Returns:
         Response values
     &#34;&#34;&#34;
-    return upper + (lower - upper) / (1 + (x / ec50) ** hill_coefficient)</code></pre>
+    return inf_asymptote + (zero_asymptote - inf_asymptote) / (
+        1 + (x / ec50) ** steepness_coefficient
+    )</code></pre>
 </details>
-<div class="desc"><p>Four-parameter Hill equation (4PL model).</p>
-<p>Formula: y = D + (A - D) / (1 + (x/C)^n)</p>
-<h2 id="where">Where</h2>
-<p>A = upper (upper asymptote)
-D = lower (lower asymptote)<br>
-C = ec50 (half-maximal concentration)
-n = hill_coefficient (slope/steepness)</p>
+<div class="desc"><p>Linear-x four-parameter logistic (linear-x 4PL) Hill form.</p>
+<p>Response vs concentration x (linear scale, same units as EC50):</p>
+<pre><code>y = inf_asymptote + (zero_asymptote - inf_asymptote) / (1 + (x / C)^n)
+</code></pre>
+<p>At concentration approaching zero, y approaches zero_asymptote; at saturating concentration,
+y approaches inf_asymptote. C = ec50, n = steepness_coefficient. Signed n encodes curve direction
+together with asymptote ordering; this is not interchangeable with log-x 4PL slope reporting.</p>
 <h2 id="args">Args</h2>
 <dl>
 <dt><strong><code>x</code></strong></dt>
-<dd>Concentration values</dd>
-<dt><strong><code>lower</code></strong></dt>
-<dd>Lower asymptote (A parameter)</dd>
-<dt><strong><code>hill_coefficient</code></strong></dt>
-<dd>Hill coefficient/slope (n parameter)</dd>
+<dd>Concentration values (linear scale)</dd>
+<dt><strong><code>zero_asymptote</code></strong></dt>
+<dd>Response as concentration -&gt; 0 (left side of dose axis)</dd>
+<dt><strong><code>steepness_coefficient</code></strong></dt>
+<dd>Exponent n in (x/C)^n. Conceptually the same quantity often called
+the <strong>Hill coefficient</strong> in linear-x dose-response formulations (cooperativity exponent);
+we use <code>steepness_coefficient</code> here to avoid confusion with log-x tools that report a
+different "Hill slope" (see module docstring).</dd>
 <dt><strong><code>ec50</code></strong></dt>
-<dd>Half-maximal concentration (C parameter)</dd>
-<dt><strong><code>upper</code></strong></dt>
-<dd>Upper asymptote (D parameter)</dd>
+<dd>Half-maximal concentration C</dd>
+<dt><strong><code>inf_asymptote</code></strong></dt>
+<dd>Response at saturating concentration (right of dose axis)</dd>
 </dl>
 <h2 id="returns">Returns</h2>
 <p>Response values</p></div>

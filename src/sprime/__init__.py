@@ -11,55 +11,67 @@ except ImportError:
     # Fallback for when version file doesn't exist (development without build)
     try:
         from importlib.metadata import version
+
         __version__ = version("sprime")
     except Exception:
         __version__ = "0.0.0.dev0+unknown"
 
 __author__ = "MoCo Makers"
 
+from . import hill_fitting, response_pipeline
 from .sprime import (
-    # Core classes
-    SPrime,
-    RawDataset,
-    ScreeningDataset,
-    DoseResponseProfile,
+    Assay,
+    CellLine,
     # Value objects
     Compound,
-    CellLine,
-    Assay,
+    DoseResponseProfile,
     HillCurveParams,
+    RawDataset,
+    ResponseNormalizationMethod,
+    ScreeningDataset,
+    # Core classes
+    SPrime,
+    calculate_delta_s_prime,
+    calculate_s_prime_from_params,
+    convert_to_micromolar,
     # Utility functions
     fit_hill_from_raw_data,
-    calculate_s_prime_from_params,
-    get_s_primes_from_file,
     get_s_prime_from_data,
-    calculate_delta_s_prime,
-    convert_to_micromolar,
+    get_s_primes_from_file,
 )
-from . import hill_fitting
 
 # Alias for alternative capitalization
 Sprime = SPrime
 
 # Import reporting classes
 try:
-    from .reporting import ReportingConfig, ConsoleOutput, ProcessingReport
+    from .reporting import ConsoleOutput, ProcessingReport, ReportingConfig
 except ImportError:
     ReportingConfig = None
     ConsoleOutput = None
     ProcessingReport = None
 
 __all__ = [
-    "SPrime", "Sprime",  # Both capitalizations work
-    "RawDataset", "ScreeningDataset", "DoseResponseProfile",
-    "Compound", "CellLine", "Assay", "HillCurveParams",
-    "fit_hill_from_raw_data", "calculate_s_prime_from_params",
-    "get_s_primes_from_file", "get_s_prime_from_data", "calculate_delta_s_prime",
+    "SPrime",
+    "Sprime",  # Both capitalizations work
+    "RawDataset",
+    "ScreeningDataset",
+    "DoseResponseProfile",
+    "Compound",
+    "CellLine",
+    "Assay",
+    "HillCurveParams",
+    "ResponseNormalizationMethod",
+    "fit_hill_from_raw_data",
+    "calculate_s_prime_from_params",
+    "get_s_primes_from_file",
+    "get_s_prime_from_data",
+    "calculate_delta_s_prime",
     "convert_to_micromolar",
     "hill_fitting",
+    "response_pipeline",
 ]
 
 # Add reporting to exports if available
 if ReportingConfig is not None:
     __all__.extend(["ReportingConfig", "ConsoleOutput", "ProcessingReport"])
-

@@ -57,9 +57,9 @@ data quality issues, warnings, and processing metrics.</p>
 </summary>
 <pre><code class="python">def print_processing_summary(report: ProcessingReport):
     &#34;&#34;&#34;Print brief summary to console.&#34;&#34;&#34;
-    print(&#34;\n&#34; + &#34;=&#34;*60)
+    print(&#34;\n&#34; + &#34;=&#34; * 60)
     print(&#34;DATA PROCESSING SUMMARY&#34;)
-    print(&#34;=&#34;*60)
+    print(&#34;=&#34; * 60)
     print(f&#34;Total Rows:                 {report.total_rows}&#34;)
     print(f&#34;Rows Processed:             {report.rows_processed}&#34;)
     print(f&#34;Rows Skipped:                {report.rows_skipped}&#34;)
@@ -68,10 +68,14 @@ data quality issues, warnings, and processing metrics.</p>
     print(f&#34;Profiles with S&#39; Calculated: {report.profiles_with_s_prime}&#34;)
     print(f&#34;Profiles Failed:             {report.profiles_failed_fit}&#34;)
     print()
-    
-    if report.missing_drug_ids or report.missing_compound_names or \
-       report.missing_cell_lines or report.insufficient_data_points or \
-       report.invalid_numeric_values:
+
+    if (
+        report.missing_drug_ids
+        or report.missing_compound_names
+        or report.missing_cell_lines
+        or report.insufficient_data_points
+        or report.invalid_numeric_values
+    ):
         print(&#34;DATA QUALITY ISSUES:&#34;)
         if report.missing_drug_ids:
             print(f&#34;  Missing Compound IDs:       {report.missing_drug_ids}&#34;)
@@ -84,18 +88,18 @@ data quality issues, warnings, and processing metrics.</p>
         if report.invalid_numeric_values:
             print(f&#34;  Invalid Numeric Values:     {report.invalid_numeric_values}&#34;)
         print()
-    
+
     if report.warnings:
         # Group by category
         by_category = {}
         for w in report.warnings:
             by_category.setdefault(w.category, []).append(w)
-        
+
         print(f&#34;WARNINGS: {len(report.warnings)} total&#34;)
         for category in sorted(by_category.keys()):
             warnings = by_category[category]
             print(f&#34;  {category}: {len(warnings)}&#34;)
-            
+
             # Show first 3 examples with row numbers
             for w in warnings[:3]:
                 context = []
@@ -106,15 +110,15 @@ data quality issues, warnings, and processing metrics.</p>
                 context_str = f&#34; ({&#39;, &#39;.join(context)})&#34; if context else &#34;&#34;
                 row_str = f&#34;Row {w.row_number}&#34; if w.row_number &gt; 0 else &#34;N/A&#34;
                 print(f&#34;    {row_str}: {w.message[:50]}{context_str}&#34;)
-            
+
             if len(warnings) &gt; 3:
                 print(f&#34;    ... and {len(warnings) - 3} more (see log file for details)&#34;)
         print()
     else:
         print(&#34;No warnings found.&#34;)
         print()
-    
-    print(&#34;=&#34;*60)</code></pre>
+
+    print(&#34;=&#34; * 60)</code></pre>
 </details>
 <div class="desc"><p>Print brief summary to console.</p></div>
 </dd>
@@ -128,9 +132,9 @@ data quality issues, warnings, and processing metrics.</p>
 </summary>
 <pre><code class="python">def print_processing_summary_verbose(report: ProcessingReport):
     &#34;&#34;&#34;Print verbose summary with all warnings to console.&#34;&#34;&#34;
-    print(&#34;\n&#34; + &#34;=&#34;*60)
+    print(&#34;\n&#34; + &#34;=&#34; * 60)
     print(&#34;DATA PROCESSING SUMMARY (VERBOSE)&#34;)
-    print(&#34;=&#34;*60)
+    print(&#34;=&#34; * 60)
     print(f&#34;Total Rows:                 {report.total_rows}&#34;)
     print(f&#34;Rows Processed:             {report.rows_processed}&#34;)
     print(f&#34;Rows Skipped:                {report.rows_skipped}&#34;)
@@ -139,10 +143,14 @@ data quality issues, warnings, and processing metrics.</p>
     print(f&#34;Profiles with S&#39; Calculated: {report.profiles_with_s_prime}&#34;)
     print(f&#34;Profiles Failed:             {report.profiles_failed_fit}&#34;)
     print()
-    
-    if report.missing_drug_ids or report.missing_compound_names or \
-       report.missing_cell_lines or report.insufficient_data_points or \
-       report.invalid_numeric_values:
+
+    if (
+        report.missing_drug_ids
+        or report.missing_compound_names
+        or report.missing_cell_lines
+        or report.insufficient_data_points
+        or report.invalid_numeric_values
+    ):
         print(&#34;DATA QUALITY ISSUES:&#34;)
         if report.missing_drug_ids:
             print(f&#34;  Missing Compound IDs:       {report.missing_drug_ids}&#34;)
@@ -155,27 +163,27 @@ data quality issues, warnings, and processing metrics.</p>
         if report.invalid_numeric_values:
             print(f&#34;  Invalid Numeric Values:     {report.invalid_numeric_values}&#34;)
         print()
-    
+
     if report.warnings:
         # Group by category
         by_category = {}
         for w in report.warnings:
             by_category.setdefault(w.category, []).append(w)
-        
+
         print(f&#34;DETAILED WARNINGS: {len(report.warnings)} total\n&#34;)
         for category in sorted(by_category.keys()):
             warnings = by_category[category]
             print(f&#34;[{category}] - {len(warnings)} warning(s)&#34;)
-            print(&#34;-&#34;*60)
-            
+            print(&#34;-&#34; * 60)
+
             for warning in warnings:
                 print(warning.to_log_line())
             print()
     else:
         print(&#34;No warnings found.&#34;)
         print()
-    
-    print(&#34;=&#34;*60)</code></pre>
+
+    print(&#34;=&#34; * 60)</code></pre>
 </details>
 <div class="desc"><p>Print verbose summary with all warnings to console.</p></div>
 </dd>
@@ -190,26 +198,26 @@ data quality issues, warnings, and processing metrics.</p>
 <pre><code class="python">def write_processing_log(report: ProcessingReport, log_filepath: Union[str, Path]):
     &#34;&#34;&#34;
     Write detailed processing log to file.
-    
+
     Args:
         report: ProcessingReport to write
         log_filepath: Path to output .log file
     &#34;&#34;&#34;
     log_filepath = Path(log_filepath)
-    
-    with open(log_filepath, &#39;w&#39;, encoding=&#39;utf-8&#39;) as f:
+
+    with open(log_filepath, &#34;w&#34;, encoding=&#34;utf-8&#34;) as f:
         # Header
-        f.write(&#34;=&#34;*80 + &#34;\n&#34;)
+        f.write(&#34;=&#34; * 80 + &#34;\n&#34;)
         f.write(&#34;SPRIME DATA PROCESSING LOG\n&#34;)
-        f.write(&#34;=&#34;*80 + &#34;\n&#34;)
+        f.write(&#34;=&#34; * 80 + &#34;\n&#34;)
         if report.input_filepath:
             f.write(f&#34;Input File: {report.input_filepath}\n&#34;)
         f.write(f&#34;Generated: {datetime.now().strftime(&#39;%Y-%m-%d %H:%M:%S&#39;)}\n&#34;)
         f.write(&#34;\n&#34;)
-        
+
         # Summary
         f.write(&#34;SUMMARY\n&#34;)
-        f.write(&#34;-&#34;*80 + &#34;\n&#34;)
+        f.write(&#34;-&#34; * 80 + &#34;\n&#34;)
         f.write(f&#34;Total Rows in File:        {report.total_rows}\n&#34;)
         f.write(f&#34;Rows Processed:            {report.rows_processed}\n&#34;)
         f.write(f&#34;Rows Skipped:              {report.rows_skipped}\n&#34;)
@@ -218,13 +226,17 @@ data quality issues, warnings, and processing metrics.</p>
         f.write(f&#34;Profiles with S&#39; Calculated: {report.profiles_with_s_prime}\n&#34;)
         f.write(f&#34;Profiles Failed:           {report.profiles_failed_fit}\n&#34;)
         f.write(&#34;\n&#34;)
-        
+
         # Data Quality Issues
-        if report.missing_drug_ids or report.missing_compound_names or \
-           report.missing_cell_lines or report.insufficient_data_points or \
-           report.invalid_numeric_values:
+        if (
+            report.missing_drug_ids
+            or report.missing_compound_names
+            or report.missing_cell_lines
+            or report.insufficient_data_points
+            or report.invalid_numeric_values
+        ):
             f.write(&#34;DATA QUALITY ISSUES\n&#34;)
-            f.write(&#34;-&#34;*80 + &#34;\n&#34;)
+            f.write(&#34;-&#34; * 80 + &#34;\n&#34;)
             if report.missing_drug_ids:
                 f.write(f&#34;Missing Compound IDs:        {report.missing_drug_ids}\n&#34;)
             if report.missing_compound_names:
@@ -236,28 +248,28 @@ data quality issues, warnings, and processing metrics.</p>
             if report.invalid_numeric_values:
                 f.write(f&#34;Invalid Numeric Values:     {report.invalid_numeric_values}\n&#34;)
             f.write(&#34;\n&#34;)
-        
+
         # Warnings by category
         if report.warnings:
             f.write(&#34;DETAILED WARNINGS\n&#34;)
-            f.write(&#34;-&#34;*80 + &#34;\n&#34;)
-            
+            f.write(&#34;-&#34; * 80 + &#34;\n&#34;)
+
             # Group by category
             by_category = {}
             for w in report.warnings:
                 by_category.setdefault(w.category, []).append(w)
-            
+
             for category in sorted(by_category.keys()):
                 warnings = by_category[category]
                 f.write(f&#34;\n[{category}] - {len(warnings)} warning(s)\n&#34;)
-                f.write(&#34;-&#34;*80 + &#34;\n&#34;)
-                
+                f.write(&#34;-&#34; * 80 + &#34;\n&#34;)
+
                 for warning in warnings:
                     f.write(warning.to_log_line() + &#34;\n&#34;)
         else:
             f.write(&#34;No warnings found.\n&#34;)
-        
-        f.write(&#34;\n&#34; + &#34;=&#34;*80 + &#34;\n&#34;)
+
+        f.write(&#34;\n&#34; + &#34;=&#34; * 80 + &#34;\n&#34;)
         f.write(&#34;End of log\n&#34;)</code></pre>
 </details>
 <div class="desc"><p>Write detailed processing log to file.</p>
@@ -285,7 +297,8 @@ data quality issues, warnings, and processing metrics.</p>
 </summary>
 <pre><code class="python">class ConsoleOutput(Enum):
     &#34;&#34;&#34;Console output verbosity levels.&#34;&#34;&#34;
-    NONE = &#34;none&#34;      # No console output
+
+    NONE = &#34;none&#34;  # No console output
     SUMMARY = &#34;summary&#34;  # Brief summary (default)
     VERBOSE = &#34;verbose&#34;  # Detailed output with all warnings</code></pre>
 </details>
@@ -322,10 +335,10 @@ data quality issues, warnings, and processing metrics.</p>
 <pre><code class="python">@dataclass
 class ProcessingReport:
     &#34;&#34;&#34;Combined report for load + process operations.&#34;&#34;&#34;
-    
+
     # File info
     input_filepath: Optional[Path] = None
-    
+
     # Summary metrics
     total_rows: int = 0
     rows_processed: int = 0
@@ -334,7 +347,7 @@ class ProcessingReport:
     profiles_created: int = 0
     profiles_with_s_prime: int = 0
     profiles_failed_fit: int = 0
-    
+
     # Data quality counts
     missing_drug_ids: int = 0
     missing_compound_names: int = 0
@@ -342,31 +355,38 @@ class ProcessingReport:
     insufficient_data_points: int = 0
     invalid_numeric_values: int = 0
     forward_filled_fields: int = 0
-    
+
     # All warnings (from both load and process)
     warnings: List[WarningEntry] = field(default_factory=list)
-    
-    def add_warning(self, row_number: int, category: str, message: str,
-                   drug_id: Optional[str] = None,
-                   compound_name: Optional[str] = None,
-                   cell_line: Optional[str] = None,
-                   field_name: Optional[str] = None):
+
+    def add_warning(
+        self,
+        row_number: int,
+        category: str,
+        message: str,
+        drug_id: Optional[str] = None,
+        compound_name: Optional[str] = None,
+        cell_line: Optional[str] = None,
+        field_name: Optional[str] = None,
+    ):
         &#34;&#34;&#34;Add a warning entry.&#34;&#34;&#34;
-        self.warnings.append(WarningEntry(
-            row_number=row_number,
-            category=category,
-            message=message,
-            drug_id=drug_id,
-            compound_name=compound_name,
-            cell_line=cell_line,
-            field_name=field_name
-        ))
-    
+        self.warnings.append(
+            WarningEntry(
+                row_number=row_number,
+                category=category,
+                message=message,
+                drug_id=drug_id,
+                compound_name=compound_name,
+                cell_line=cell_line,
+                field_name=field_name,
+            )
+        )
+
     def write_log_file(self, filepath: Optional[Path] = None):
         &#34;&#34;&#34;Write log file if enabled.&#34;&#34;&#34;
         if not ReportingConfig.log_to_file:
             return
-        
+
         # Use provided path or configured path or auto-generate
         if filepath:
             log_path = Path(filepath)
@@ -377,9 +397,9 @@ class ProcessingReport:
             log_path = self.input_filepath.parent / f&#34;{self.input_filepath.stem}_processing.log&#34;
         else:
             log_path = Path(&#34;sprime_processing.log&#34;)
-        
+
         write_processing_log(self, log_path)
-    
+
     def print_console_summary(self):
         &#34;&#34;&#34;Print console summary based on configured verbosity.&#34;&#34;&#34;
         if ReportingConfig.console_output == ConsoleOutput.NONE:
@@ -463,21 +483,28 @@ class ProcessingReport:
 <summary>
 <span>Expand source code</span>
 </summary>
-<pre><code class="python">def add_warning(self, row_number: int, category: str, message: str,
-               drug_id: Optional[str] = None,
-               compound_name: Optional[str] = None,
-               cell_line: Optional[str] = None,
-               field_name: Optional[str] = None):
+<pre><code class="python">def add_warning(
+    self,
+    row_number: int,
+    category: str,
+    message: str,
+    drug_id: Optional[str] = None,
+    compound_name: Optional[str] = None,
+    cell_line: Optional[str] = None,
+    field_name: Optional[str] = None,
+):
     &#34;&#34;&#34;Add a warning entry.&#34;&#34;&#34;
-    self.warnings.append(WarningEntry(
-        row_number=row_number,
-        category=category,
-        message=message,
-        drug_id=drug_id,
-        compound_name=compound_name,
-        cell_line=cell_line,
-        field_name=field_name
-    ))</code></pre>
+    self.warnings.append(
+        WarningEntry(
+            row_number=row_number,
+            category=category,
+            message=message,
+            drug_id=drug_id,
+            compound_name=compound_name,
+            cell_line=cell_line,
+            field_name=field_name,
+        )
+    )</code></pre>
 </details>
 <div class="desc"><p>Add a warning entry.</p></div>
 </dd>
@@ -512,7 +539,7 @@ class ProcessingReport:
     &#34;&#34;&#34;Write log file if enabled.&#34;&#34;&#34;
     if not ReportingConfig.log_to_file:
         return
-    
+
     # Use provided path or configured path or auto-generate
     if filepath:
         log_path = Path(filepath)
@@ -523,7 +550,7 @@ class ProcessingReport:
         log_path = self.input_filepath.parent / f&#34;{self.input_filepath.stem}_processing.log&#34;
     else:
         log_path = Path(&#34;sprime_processing.log&#34;)
-    
+
     write_processing_log(self, log_path)</code></pre>
 </details>
 <div class="desc"><p>Write log file if enabled.</p></div>
@@ -540,41 +567,41 @@ class ProcessingReport:
 </summary>
 <pre><code class="python">class ReportingConfig:
     &#34;&#34;&#34;Global configuration for data quality reporting.&#34;&#34;&#34;
-    
+
     # Log file settings
     log_to_file: bool = False
     log_filepath: Optional[Path] = None
-    
+
     # Console output settings
     console_output: ConsoleOutput = ConsoleOutput.SUMMARY
-    
+
     @classmethod
     def configure(
         cls,
         log_to_file: bool = False,
         log_filepath: Optional[Union[str, Path]] = None,
-        console_output: Union[ConsoleOutput, str] = ConsoleOutput.SUMMARY
+        console_output: Union[ConsoleOutput, str] = ConsoleOutput.SUMMARY,
     ):
         &#34;&#34;&#34;
         Configure global reporting settings.
-        
+
         Args:
             log_to_file: If True, write detailed log file (default: False)
             log_filepath: Path to log file (default: auto-generated from input filename)
             console_output: Console verbosity - &#34;none&#34;, &#34;summary&#34;, or &#34;verbose&#34; (default: &#34;summary&#34;)
         &#34;&#34;&#34;
         cls.log_to_file = log_to_file
-        
+
         if log_filepath:
             cls.log_filepath = Path(log_filepath)
         else:
             cls.log_filepath = None
-        
+
         if isinstance(console_output, str):
             cls.console_output = ConsoleOutput(console_output.lower())
         else:
             cls.console_output = console_output
-    
+
     @classmethod
     def reset(cls):
         &#34;&#34;&#34;Reset to defaults.&#34;&#34;&#34;
@@ -635,6 +662,7 @@ class ProcessingReport:
 <pre><code class="python">@dataclass
 class WarningEntry:
     &#34;&#34;&#34;Single warning with location information.&#34;&#34;&#34;
+
     row_number: int  # CSV row number (1-based, header is row 1, 0 for non-CSV sources)
     category: str  # &#34;DATA_QUALITY&#34;, &#34;CURVE_FIT&#34;, &#34;MISSING_DATA&#34;, &#34;FORWARD_FILL&#34;, &#34;NUMERICAL&#34;, &#34;CALCULATION&#34;
     message: str
@@ -642,7 +670,7 @@ class WarningEntry:
     compound_name: Optional[str] = None
     cell_line: Optional[str] = None
     field_name: Optional[str] = None
-    
+
     def to_log_line(self) -&gt; str:
         &#34;&#34;&#34;Format for log file.&#34;&#34;&#34;
         context_parts = []
@@ -654,7 +682,7 @@ class WarningEntry:
             context_parts.append(f&#34;Cell_Line: {self.cell_line}&#34;)
         if self.field_name:
             context_parts.append(f&#34;Field: {self.field_name}&#34;)
-        
+
         context = &#34; | &#34;.join(context_parts) if context_parts else &#34;N/A&#34;
         row_str = f&#34;Row {self.row_number:4d}&#34; if self.row_number &gt; 0 else &#34;Row   N/A&#34;
         return f&#34;{row_str} | [{self.category:15s}] {self.message} | {context}&#34;</code></pre>
@@ -712,7 +740,7 @@ class WarningEntry:
         context_parts.append(f&#34;Cell_Line: {self.cell_line}&#34;)
     if self.field_name:
         context_parts.append(f&#34;Field: {self.field_name}&#34;)
-    
+
     context = &#34; | &#34;.join(context_parts) if context_parts else &#34;N/A&#34;
     row_str = f&#34;Row {self.row_number:4d}&#34; if self.row_number &gt; 0 else &#34;Row   N/A&#34;
     return f&#34;{row_str} | [{self.category:15s}] {self.message} | {context}&#34;</code></pre>

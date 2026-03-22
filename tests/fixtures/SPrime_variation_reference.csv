@@ -1,0 +1,10 @@
+compound,target(s),final compound concentration uM,log { },cell type,time point,media wt cells,,wt lot nb,IC50 [uM],"percent nucleus response, mean of triplicate",,test/control ratio,normalise to 1,x 100 scale,4-PL model (normalized),,A-D (Emax),C (EC50),Emax/EC50, x 1 µM,"S' for 17-AAG in NF2-/- at 48 hours, Normalized Method",test/control ratio,"Nonnormalized, x100 scale",4-PL model (non-normalized),,A-D (Emax),C (EC50),Emax/EC50, x 1 µM,"S' for 17-AAG in NF2-/- at 48 hours, Nonnormalized Method","linear_x_steepness_n (sprime, asymptote-norm E2E)","linear_x_steepness_n (sprime, response-scale auto-fit)"
+17-AAG,HSP90,0.003,-2.52,NF2-/-,48h,,0.2,,0.21,41.24,,1.168318738,1,100,Parameter Values,,97.0276,0.202,480.3346535,480.3346535,6.867631094104203,1.168318738,116.8318738,Parameter Values,,113.34,0.20,566.7,566.7,7.032978022189737,4.212380919875035,4.212380918737757
+17-AAG,HSP90,0.01,-2,NF2-/-,48h,,0.2,,0.21,40.86,,1.157377906,0.990635404,99.06,   A,97.736,,,,,,1.157377906,115.7377906,   A,111.6102,,,,,,,
+17-AAG,HSP90,0.03,-1.52,NF2-/-,48h,,0.2,,0.21,38.78,,1.098541497,0.940275509,94.03,   B,4.21,,,,,,1.098541497,109.8541497,   B,5.31,,,,,,,
+17-AAG,HSP90,0.1,-1,NF2-/-,48h,,0.2,,0.21,38.38,,1.087292463,0.930647115,93.06,   logC,-0.69,,,,,,1.087292463,108.7292463,   logC,-0.81,,,,,,,
+17-AAG,HSP90,0.3,-0.52,NF2-/-,48h,,0.2,,0.21,6.64,,0.187973922,0.16089267,16.09,   D,0.71,,,,,,0.187973922,18.79739216,   D,0,,,,,,,
+17-AAG,HSP90,1,0,NF2-/-,48h,,0.2,,0.21,0.94,,0.02651844,0.02269795,2.27,   C,0.2,,,,,,0.02651844,2.651844012,   C,0.15,,,,,,,
+17-AAG,HSP90,3,0.48,NF2-/-,48h,,0.2,,0.21,0,,0,0,0,,,,,,,,0,0,,,,,,,,,
+17-AAG,HSP90,10,1,NF2-/-,48h,,0.2,,0.21,0,,0,0,0,,,,,,,,0,0,,,,,,,,,
+DMSO,,0,,NF2 -/-,48h,,n.d.,,,35.3,,,,,,,,,,,,,,,,,,,,,,
