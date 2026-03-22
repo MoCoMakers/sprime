@@ -1,3 +1,5 @@
+[//]: # pypi-readme-sync FORMULA_REVISION:1 LAST_VALIDATED_WITH_PYPI_RELEASE:v0.2.1
+
 # sprime
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
@@ -26,9 +28,10 @@ S' is a single value score that summarizes a drug's dose-response curve. The met
 
 This is equivalent to (read as **Asymptote** with **Zero** / **Inf** subscript, and **EC** with **50** subscript):
 
-```math
-S^{\prime} = \ln\left(\frac{\mathrm{Asymptote}_{\mathrm{Zero}} - \mathrm{Asymptote}_{\mathrm{Inf}}}{\mathrm{EC}_{50}} + \sqrt{\left(\frac{\mathrm{Asymptote}_{\mathrm{Zero}} - \mathrm{Asymptote}_{\mathrm{Inf}}}{\mathrm{EC}_{50}}\right)^2 + 1}\right)
-```
+**Equivalent logarithmic form** — LaTeX renders on [GitHub README](https://github.com/MoCoMakers/sprime/blob/main/README.md#about-s-s-prime). On PyPI (plain text):
+
+`S' = ln( (Zero_asymptote - Inf_asymptote) / EC50 + sqrt( ((Zero_asymptote - Inf_asymptote) / EC50)^2 + 1 ) )`
+
 
 In code and CSV those are **`Zero_asymptote`**, **`Inf_asymptote`**, and **`EC50`** (same as the `asinh` line above). Legacy **Lower** / **Upper** map to the two asymptotes.
 

@@ -52,6 +52,28 @@ python -m pdoc --html --output-dir pdoc_html --force sprime
 
 **Update on commit:** A pre-commit hook can rebuild and stage `pdoc_html` automatically when you change `.py` files. See [Pre-commit](#pre-commit) below.
 
+## PyPI long description (`README-PyPI.md`)
+
+**`pyproject.toml`** sets **`readme = "README-PyPI.md"`** so the PyPI project page uses text that renders without GitHub’s math engine. **`README.md`** stays the canonical repo front page (including GitHub fenced `math` for LaTeX).
+
+- **Regenerate** after editing **`README.md`** (or the PyPI math template in the script):
+
+  ```bash
+  python scripts/sync_readme_pypi.py
+  ```
+
+- **Release bookkeeping:** the first line of **`README-PyPI.md`** is a machine-readable comment, e.g.  
+  `[//]: # pypi-readme-sync FORMULA_REVISION:1 LAST_VALIDATED_WITH_PYPI_RELEASE:v0.2.1`  
+  After you publish a release whose long description you care about, optionally run:
+
+  ```bash
+  python scripts/sync_readme_pypi.py --set-release-tag v0.3.0
+  ```
+
+- **Bump `FORMULA_REVISION`** in **`scripts/sync_readme_pypi.py`** only when you change the PyPI-specific plain-text math block (not when the LaTeX inside `README.md` changes—those edits only require re-running the sync script).
+
+Pre-commit and the **Publish to PyPI** workflow run **`python scripts/sync_readme_pypi.py --check`** so **`README-PyPI.md`** cannot drift from **`README.md`**.
+
 ## Pre-commit
 
 Git does **not** read `.pre-commit-config.yaml`. The [pre-commit](https://pre-commit.com/) tool does. You install a Git hook that runs pre-commit on each `git commit`.
@@ -65,6 +87,7 @@ Git does **not** read `.pre-commit-config.yaml`. The [pre-commit](https://pre-co
 2. When you `git commit`, pre-commit runs the configured hooks **before** Git finishes the commit:
 
    - **Ruff** -- runs `ruff check` on **staged** paths (see `.pre-commit-config.yaml`). That can include e.g. **`docs/**/*.ipynb`**, not only `src/` and `tests/`—so **`ruff check .`** from the repo root before committing aligns with what the hook may see. If Ruff reports any problem, the hook **exits with an error** and **Git aborts the commit** (your staged changes stay staged; fix or `ruff check . --fix`, then try again). Invalid Python is reported like other check failures.
+   - **README-PyPI sync** -- runs on **every** commit (`always_run: true`): **`python scripts/sync_readme_pypi.py --check`**. If **`README-PyPI.md`** does not match **`README.md`**, the hook prints a fix hint to stderr and **pre-commit aborts the commit**. Regenerate with **`python scripts/sync_readme_pypi.py`** and stage **`README-PyPI.md`**.
    - **pdoc** -- runs only when staged files include `.py` changes (`files: \.py$`). It runs `python scripts/build_docs_precommit.py`, which builds `pdoc_html/` and stages it so the commit can include updated API HTML.
 
    To **skip all hooks** (not recommended): `git commit --no-verify`.

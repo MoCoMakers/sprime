@@ -8,6 +8,12 @@ repos:
       - id: ruff
   - repo: local
     hooks:
+      - id: readme-pypi-sync
+        name: Check README-PyPI.md is synced with README.md
+        entry: python scripts/sync_readme_pypi.py --check
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: pdoc
         name: Build pdoc HTML (pdoc_html) and stage for commit
         entry: python scripts/build_docs_precommit.py

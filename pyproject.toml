@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "sprime"
 dynamic = ["version"]
 description = "A biomedical library for screening high-throughput screening data in preclinical drug studies"
-readme = "README.md"
+readme = "README-PyPI.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
