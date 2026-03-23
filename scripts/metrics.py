@@ -5,7 +5,8 @@ import math
 import numpy as np
 import pandas as pd
 from scipy.optimize import curve_fit
-
+git add .
+git commit -m "implement sprime metric"
 # ---- 4PL model ----
 # y = D + (A - D) / (1 + (x/C)^B)
 # A: top, D: bottom, C: EC50, B: Hill slope
