@@ -382,7 +382,7 @@ delta_results = {
             "compound_name": "Drug A",
             "drug_id": "DRUG001",
             "test_cell_line": "tumor_line_1",
-            "s_prime_reference": 2.5,
+            "s_prime_ref": 2.5,
             "s_prime_test": 4.0,
             "delta_s_prime": -1.5  # Negative = more effective in test
         },
@@ -458,7 +458,7 @@ for ref_cellline, comparisons in delta_results.items():
     for rank, comp in enumerate(sorted_comps, start=1):
         print(f"  {rank}. {comp['compound_name']}: "
               f"Delta S' = {comp['delta_s_prime']:.2f} "
-              f"(S' ref={comp['s_prime_reference']:.2f}, "
+              f"(S' ref={comp['s_prime_ref']:.2f}, "
               f"S' test={comp['s_prime_test']:.2f})")
 ```
 
