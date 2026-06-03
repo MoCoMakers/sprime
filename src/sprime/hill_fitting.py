@@ -16,6 +16,13 @@ numerically consistent with the linear-x parameterization; compare log-x vs line
 coefficient** *n* in linear-x Hill formulations; we avoid the name ``hill_coefficient`` here
 so it is not confused with log-x "Hill slope" outputs from other packages.
 
+**Sign convention:** After fitting, parameters are always returned in **canonical form** using
+Kendall concordance over all dose-response pairs to detect the biological curve direction. For
+inhibitory curves (response decreases with dose), this guarantees ``zero_asymptote > inf_asymptote``
+and therefore S' > 0. For disinhibitory curves, ``zero_asymptote < inf_asymptote`` and S' < 0. This
+prevents the degenerate negative-*n* parameterization that ``scipy`` can converge to for steep
+inhibitory curves, which would otherwise silently flip the sign of S'.
+
 Adapted to work with sprime's domain entities.
 """
 
@@ -66,6 +73,53 @@ def hill_equation(
     )
 
 
+def _direction_is_down(responses) -> bool:
+    """
+    Detect inhibitory (decreasing) curve direction via Kendall concordance over all pairs.
+    Ties default to inhibitory — conservative for drug screening where most active compounds
+    reduce viability.
+    """
+    n = len(responses)
+    down = sum(1 for i in range(n) for j in range(i + 1, n) if responses[j] < responses[i])
+    up = sum(1 for i in range(n) for j in range(i + 1, n) if responses[j] > responses[i])
+    return down >= up
+
+
+def _normalize_direction(params, y_data):
+    """
+    Enforce canonical parameterization after fitting:
+      inhibitory (data goes down) → zero_asymptote > inf_asymptote → S' positive
+      disinhibitory  (data goes up)  → zero_asymptote < inf_asymptote → S' negative
+
+    Swapping zero↔inf and flipping sign(n) describes the identical curve — same residuals,
+    same r². This corrects the degenerate negative-n solution that scipy can converge to
+    for steep inhibitory curves when seeded with n=-0.3.
+    """
+    from .sprime import HillCurveParams
+
+    goes_down = _direction_is_down(list(y_data))
+    zero_gt_inf = params.zero_asymptote > params.inf_asymptote
+
+    if goes_down == zero_gt_inf:
+        # Parameterization already matches the data direction:
+        #   inhibitory (goes_down=True)  with zero > inf  -> S' positive (correct)
+        #   disinhibitory (goes_down=False) with zero < inf  -> S' negative (correct)
+        return params
+
+    # Parameterization is in the degenerate form: asymptote ordering contradicts the data
+    # direction.  Swap zero<->inf and flip sign(n) to recover the canonical form.
+    # The two parameterizations describe the same curve -- r_squared is preserved.
+    #   degenerate inhibitory: goes_down=True,  zero < inf  -> swap gives zero > inf, S' positive
+    #   degenerate disinhibitory: goes_down=False, zero > inf  -> swap gives zero < inf, S' negative
+    return HillCurveParams(
+        ec50=params.ec50,
+        zero_asymptote=params.inf_asymptote,
+        inf_asymptote=params.zero_asymptote,
+        steepness_coefficient=-params.steepness_coefficient,
+        r_squared=params.r_squared,
+    )
+
+
 def fit_hill_curve(
     concentrations: List[float],
     responses: List[float],
@@ -109,7 +163,9 @@ def fit_hill_curve(
         **curve_fit_kwargs: Additional arguments passed to scipy.optimize.curve_fit
 
     Returns:
-        HillCurveParams: Fitted curve parameters with r-squared
+        HillCurveParams: Fitted curve parameters. steepness_coefficient sign and thus S' direction
+        are determined by Kendall concordance: inhibitory curves (positive S') or disinhibitory
+        curves (negative S').
 
     Raises:
         ValueError: If inputs are invalid
@@ -144,8 +200,7 @@ def fit_hill_curve(
 
     # Auto-detect or use specified curve direction
     if curve_direction is None:
-        # Try both directions, return best fit
-        return _fit_with_auto_direction(
+        result = _fit_with_auto_direction(
             x_data,
             y_data,
             initial_zero_asymptote,
@@ -157,8 +212,7 @@ def fit_hill_curve(
             **curve_fit_kwargs,
         )
     else:
-        # Fit with specified direction
-        return _fit_single_direction(
+        result = _fit_single_direction(
             x_data,
             y_data,
             curve_direction,
@@ -170,6 +224,11 @@ def fit_hill_curve(
             bounds,
             **curve_fit_kwargs,
         )
+
+    # Enforce canonical sign convention regardless of which scipy basin was found.
+    # Inhibitory (data goes down) -> zero > inf -> S' positive.
+    # Activatory (data goes up)   -> zero < inf -> S' negative.
+    return _normalize_direction(result, y_data)
 
 
 def _fit_single_direction(

@@ -5,6 +5,8 @@ These tests use examples with known expected results to verify
 that the hill_fitting implementation produces correct outputs.
 """
 
+import math
+
 import pytest
 
 from sprime import HillCurveParams, hill_fitting
@@ -277,3 +279,105 @@ class TestHillFittingGeneral:
 
         assert isinstance(result2, HillCurveParams)
         assert result2.inf_asymptote < result2.zero_asymptote  # Should be decreasing
+
+
+class TestSignConventionNCI60:
+    """
+    Regression fixtures from the NCI-60 sign-convention audit (report-on-sign.md, v0.2.2).
+
+    Before the fix, scipy could converge to a degenerate negative-n parameterization for steep
+    inhibitory curves, silently flipping the sign of S'.  These tests cover all four fixture
+    categories from the report:
+
+      A - canonical inhibitory  (always converged correctly; must stay correct)
+      B - degenerate inhibitory (previously wrong sign; must now be canonical)
+      D - true disinhibitory       (correct negative S'; normalization must not flip these)
+
+    S' is computed locally as asinh((zero - inf) / ec50) to mirror the pipeline formula.
+    """
+
+    # --- Fixture data (concentrations in uM, responses in percent-of-treated-control) ---
+
+    # R1: Doxorubicin / 786-0 Renal -- canonical inhibitory, n > 0 before and after fix
+    R1_CONC = [0.0024997697, 0.024997697, 0.2499769702, 2.4997697022, 24.9976970218]
+    R1_RESP = [87.1106, 68.9581, 37.2718, 27.3899, 14.0709]
+
+    # R2: Doxorubicin / MDA-MB-435 Melanoma -- same biology as R1 but scipy hit degenerate n<0 basin
+    R2_CONC = [0.0024997697, 0.024997697, 0.2499769702, 2.4997697022, 24.9976970218]
+    R2_RESP = [96.8103, 93.4483, 68.0172, 13.0172, 5.0]
+
+    # B1: NSC-400008 / ACHN Renal -- steep step-like drop, consistently hit degenerate basin
+    B1_CONC = [0.01, 0.1, 1.0, 10.0, 100.0]
+    B1_RESP = [96.3756, 96.3756, 96.0461, 12.0264, 11.5321]
+
+    # B2: NSC-400008 / SK-OV-3 Ovarian -- same compound as B1, different cell line, same artifact
+    B2_CONC = [0.01, 0.1, 1.0, 10.0, 100.0]
+    B2_RESP = [103.0978, 103.0978, 102.5169, 16.2633, 15.5857]
+
+    # E2: NSC-602132 / SW-620 Colon -- canonical inhibitory, moderate S'
+    E2_CONC = [0.01, 0.1, 1.0, 10.0, 100.0]
+    E2_RESP = [100.8869, 100.8869, 100.6652, 33.592, 30.4878]
+
+    # D1: NSC-717713 / SK-MEL-28 Melanoma -- true disinhibitory, response rises with dose
+    D1_CONC = [0.01, 0.1, 1.0, 10.0, 100.0]
+    D1_RESP = [101.9246, 110.1617, 112.3941, 113.9338, 113.087]
+
+    @staticmethod
+    def _s_prime(hp):
+        return math.asinh((hp.zero_asymptote - hp.inf_asymptote) / hp.ec50)
+
+    # --- Category A / E: canonical inhibitory must stay positive ---
+
+    def test_canonical_inhibitory_r1_positive_n_and_s_prime(self):
+        """R1 clean inhibitory curve: canonical n>0 and positive S'."""
+        hp = hill_fitting.fit_hill_curve(self.R1_CONC, self.R1_RESP)
+        assert hp.steepness_coefficient > 0
+        assert hp.zero_asymptote > hp.inf_asymptote
+        assert self._s_prime(hp) == pytest.approx(7.998, abs=0.01)
+
+    def test_canonical_inhibitory_e2_positive_s_prime(self):
+        """E2 moderate inhibitory: S' stays positive."""
+        hp = hill_fitting.fit_hill_curve(self.E2_CONC, self.E2_RESP)
+        assert hp.zero_asymptote > hp.inf_asymptote
+        assert self._s_prime(hp) == pytest.approx(3.448, abs=0.01)
+
+    # --- Category B: formerly degenerate inhibitory must now be canonical ---
+
+    def test_degenerate_inhibitory_r2_normalized_to_positive(self):
+        """R2 steep inhibitory: previously hit n<0 basin giving S'=-5.99; must now be +5.99."""
+        hp = hill_fitting.fit_hill_curve(self.R2_CONC, self.R2_RESP)
+        assert (
+            hp.steepness_coefficient > 0
+        ), "steepness_coefficient must be positive after normalization"
+        assert hp.zero_asymptote > hp.inf_asymptote, "zero must exceed inf for inhibitory curve"
+        assert self._s_prime(hp) == pytest.approx(5.989, abs=0.01)
+
+    def test_degenerate_inhibitory_b1_normalized_to_positive(self):
+        """B1 steep step curve: previously S'=-3.94; must now be +3.94."""
+        hp = hill_fitting.fit_hill_curve(self.B1_CONC, self.B1_RESP)
+        assert hp.steepness_coefficient > 0
+        assert hp.zero_asymptote > hp.inf_asymptote
+        assert self._s_prime(hp) == pytest.approx(3.939, abs=0.01)
+
+    def test_degenerate_inhibitory_b2_normalized_to_positive(self):
+        """B2 same compound as B1, different cell line: previously S'=-4.00; must now be +4.00."""
+        hp = hill_fitting.fit_hill_curve(self.B2_CONC, self.B2_RESP)
+        assert hp.steepness_coefficient > 0
+        assert hp.zero_asymptote > hp.inf_asymptote
+        assert self._s_prime(hp) == pytest.approx(3.996, abs=0.01)
+
+    # --- Category D: true disinhibitory must stay negative ---
+
+    def test_true_disinhibitory_d1_stays_negative(self):
+        """D1 response rises with dose: S' must remain negative; normalization must not flip it."""
+        hp = hill_fitting.fit_hill_curve(self.D1_CONC, self.D1_RESP)
+        assert hp.zero_asymptote < hp.inf_asymptote, "disinhibitory curve must have zero < inf"
+        assert self._s_prime(hp) < 0
+
+    # --- Invariant: r_squared is unaffected by canonicalization ---
+
+    def test_normalization_preserves_r_squared(self):
+        """r_squared is a property of the residuals, unchanged by the zero<->inf swap."""
+        hp = hill_fitting.fit_hill_curve(self.R2_CONC, self.R2_RESP)
+        assert hp.r_squared is not None
+        assert hp.r_squared > 0.999  # report value: 0.999831

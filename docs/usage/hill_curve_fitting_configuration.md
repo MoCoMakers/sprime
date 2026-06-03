@@ -42,6 +42,17 @@ s_prime = calculate_s_prime_from_params(
 
 ---
 
+## Sign convention and canonical parameters
+
+`fit_hill_curve` always returns parameters in **canonical form**: the direction of the curve
+(inhibitory vs disinhibitory) is detected from the data using Kendall concordance over all
+dose-response pairs, and the asymptotes are ordered so that `zero_asymptote > inf_asymptote`
+for inhibitory curves (S' > 0) and `zero_asymptote < inf_asymptote` for disinhibitory curves
+(S' < 0). This makes the sign of S' a reliable indicator of biological direction regardless of
+which `scipy` convergence basin was reached during optimization.
+
+---
+
 ## Function Signature
 
 ```python

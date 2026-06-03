@@ -37,7 +37,7 @@ In code and CSV those are **`Zero_asymptote`**, **`Inf_asymptote`**, and **`EC50
 - **Inf asymptote** = Response at saturating concentration (right of curve)
 - **EC50** = Half-maximal effect concentration
 
-**Sign is meaningful:** for many inhibition / viability assays the fitted **Zero** asymptote is **above** **Inf**, so the numerator is positive and larger |S'| indicates a stronger combined potency/efficacy signal in that orientation. See [Background and Concepts](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md#the-s-s-prime-metric) for detailed information.
+**Sign is meaningful:** for inhibitory curves the fitted **Zero** asymptote is **above** **Inf**, giving a positive S'; disinhibitory curves (response rises with dose) give a negative S'. The library enforces this convention automatically after every fit using Kendall concordance across all dose-response pairs, so the sign reliably tracks biological curve direction regardless of which convergence basin the optimizer finds. See [Background and Concepts](https://github.com/MoCoMakers/sprime/blob/main/docs/background/background_and_concepts.md#the-s-s-prime-metric) for detailed information.
 
 ### Delta S' and Comparative Analysis
 

@@ -8,8 +8,21 @@ Details new contributors need to run tests, build API docs, and use pre-commit.
 git clone https://github.com/MoCoMakers/sprime.git
 cd sprime
 python -m venv venv
-# Windows: venv\Scripts\activate
-# macOS/Linux: source venv/bin/activate
+```
+
+Activate the venv — **required before committing** (pre-commit hooks use `language: system`, meaning they run with whatever Python is on PATH; the venv must be active so hooks find `pdoc3` and other dev dependencies):
+
+```bash
+# Windows (PowerShell)
+.\venv\Scripts\Activate.ps1
+
+# macOS/Linux
+source venv/bin/activate
+```
+
+Then install the package and dev dependencies:
+
+```bash
 pip install -e ".[dev]"
 ```
 
@@ -88,7 +101,7 @@ Git does **not** read `.pre-commit-config.yaml`. The [pre-commit](https://pre-co
 
    - **Ruff** -- runs `ruff check` on **staged** paths (see `.pre-commit-config.yaml`). That can include e.g. **`docs/**/*.ipynb`**, not only `src/` and `tests/`—so **`ruff check .`** from the repo root before committing aligns with what the hook may see. If Ruff reports any problem, the hook **exits with an error** and **Git aborts the commit** (your staged changes stay staged; fix or `ruff check . --fix`, then try again). Invalid Python is reported like other check failures.
    - **README-PyPI sync** -- runs on **every** commit (`always_run: true`): **`python scripts/sync_readme_pypi.py --check`**. If **`README-PyPI.md`** does not match **`README.md`**, the hook prints a fix hint to stderr and **pre-commit aborts the commit**. Regenerate with **`python scripts/sync_readme_pypi.py`** and stage **`README-PyPI.md`**.
-   - **pdoc** -- runs only when staged files include `.py` changes (`files: \.py$`). It runs `python scripts/build_docs_precommit.py`, which builds `pdoc_html/` and stages it so the commit can include updated API HTML.
+   - **pdoc** -- runs only when staged files include `.py` changes (`files: \.py$`). It runs `python scripts/build_docs_precommit.py`, which builds `pdoc_html/` and stages it so the commit can include updated API HTML. **Requires the venv to be active** (`pdoc3` is a dev dependency; the hook uses the system PATH Python and will fail with `No module named pdoc` if the venv is not activated).
 
    To **skip all hooks** (not recommended): `git commit --no-verify`.
 

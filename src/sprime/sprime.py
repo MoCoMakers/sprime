@@ -139,6 +139,12 @@ class HillCurveParams:
     ``zero_asymptote`` / ``inf_asymptote``. Do not substitute **inf - zero** (common in some 4PL
     "amplitude" wording): the sign differs and **S'** is defined only with **zero - inf**.
 
+    **Sign convention:** :func:`~sprime.hill_fitting.fit_hill_curve` always returns parameters in
+    canonical form -- inhibitory curves (response decreases with dose) have
+    ``zero_asymptote > inf_asymptote`` so S' > 0; disinhibitory curves have
+    ``zero_asymptote < inf_asymptote`` so S' < 0. The sign of S' therefore reliably tracks
+    biological curve direction for all fitted results.
+
     **Conceptual mapping:** In many pharmacology/biochemistry texts the exponent *n* in a
     linear-x Hill form is called the **Hill coefficient** (often linked to cooperativity).
     That is the same mathematical role as ``steepness_coefficient`` here. We use the name
@@ -253,8 +259,9 @@ class DoseResponseProfile:
         Uses **fitted** ``hill_params`` (or precalc loaded into them) - do not substitute assumed
         asymptotes. Same definition as :func:`calculate_s_prime_from_params`.
 
-        Sign is meaningful: e.g. when response **decreases** with dose, ``zero_asymptote`` is often
-        **greater** than ``inf_asymptote``, so the numerator is positive.
+        Sign is meaningful and canonical when ``hill_params`` came from
+        :func:`~sprime.hill_fitting.fit_hill_curve`: inhibitory curves (response decreases with
+        dose) have ``zero_asymptote > inf_asymptote`` so S' > 0; disinhibitory curves have S' < 0.
 
         Requires hill_params to be set (call fit_hill_curve first).
 

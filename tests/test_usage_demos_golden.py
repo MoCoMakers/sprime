@@ -135,9 +135,10 @@ class TestRawVehicleControlDemos:
             _USAGE_DIR / "demo_raw_vehicle_control_delta.csv",
             values_as="columns",
         )
-        assert sp_by_cl["NF2-/- Ref"] == pytest.approx(-3.1764092497421257, rel=_RTOL)
-        assert sp_by_cl["NF2-/- Test_1"] == pytest.approx(-6.143367466705312, rel=_RTOL)
-        assert sp_by_cl["NF2-/- Test_2"] == pytest.approx(-4.720064185865709, rel=_RTOL)
+        # Canonical sign convention (v0.3.0): all three are inhibitory curves; S' is positive.
+        assert sp_by_cl["NF2-/- Ref"] == pytest.approx(3.1764092497421257, rel=_RTOL)
+        assert sp_by_cl["NF2-/- Test_1"] == pytest.approx(6.143367466705312, rel=_RTOL)
+        assert sp_by_cl["NF2-/- Test_2"] == pytest.approx(4.720064185865709, rel=_RTOL)
 
         raw, _ = SPrime.load(
             _USAGE_DIR / "demo_raw_vehicle_control_delta.csv",
@@ -151,5 +152,6 @@ class TestRawVehicleControlDemos:
         )
         rows = delta["NF2-/- Ref"]
         by_test = {r["test_cell_line"]: r["delta_s_prime"] for r in rows}
-        assert by_test["NF2-/- Test_1"] == pytest.approx(2.9669582169631865, rel=_RTOL)
-        assert by_test["NF2-/- Test_2"] == pytest.approx(1.5436549361235836, rel=_RTOL)
+        # delta = S'(Ref) - S'(Test); all curves now canonical-positive, so Ref < Test_1/2
+        assert by_test["NF2-/- Test_1"] == pytest.approx(-2.9669582169631865, rel=_RTOL)
+        assert by_test["NF2-/- Test_2"] == pytest.approx(-1.5436549361235836, rel=_RTOL)

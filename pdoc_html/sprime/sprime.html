@@ -1197,8 +1197,9 @@ class DoseResponseProfile:
         Uses **fitted** ``hill_params`` (or precalc loaded into them) - do not substitute assumed
         asymptotes. Same definition as :func:`calculate_s_prime_from_params`.
 
-        Sign is meaningful: e.g. when response **decreases** with dose, ``zero_asymptote`` is often
-        **greater** than ``inf_asymptote``, so the numerator is positive.
+        Sign is meaningful and canonical when ``hill_params`` came from
+        :func:`~sprime.hill_fitting.fit_hill_curve`: inhibitory curves (response decreases with
+        dose) have ``zero_asymptote &gt; inf_asymptote`` so S&#39; &gt; 0; disinhibitory curves have S&#39; &lt; 0.
 
         Requires hill_params to be set (call fit_hill_curve first).
 
@@ -1319,8 +1320,9 @@ class DoseResponseProfile:
     Uses **fitted** ``hill_params`` (or precalc loaded into them) - do not substitute assumed
     asymptotes. Same definition as :func:`calculate_s_prime_from_params`.
 
-    Sign is meaningful: e.g. when response **decreases** with dose, ``zero_asymptote`` is often
-    **greater** than ``inf_asymptote``, so the numerator is positive.
+    Sign is meaningful and canonical when ``hill_params`` came from
+    :func:`~sprime.hill_fitting.fit_hill_curve`: inhibitory curves (response decreases with
+    dose) have ``zero_asymptote &gt; inf_asymptote`` so S&#39; &gt; 0; disinhibitory curves have S&#39; &lt; 0.
 
     Requires hill_params to be set (call fit_hill_curve first).
 
@@ -1341,8 +1343,9 @@ class DoseResponseProfile:
 <div class="desc"><p>Calculate <strong>S' = asinh((zero_asymptote - inf_asymptote) / EC50)</strong>.</p>
 <p>Uses <strong>fitted</strong> <code>hill_params</code> (or precalc loaded into them) - do not substitute assumed
 asymptotes. Same definition as :func:<code><a title="sprime.sprime.calculate_s_prime_from_params" href="#sprime.sprime.calculate_s_prime_from_params">calculate_s_prime_from_params()</a></code>.</p>
-<p>Sign is meaningful: e.g. when response <strong>decreases</strong> with dose, <code>zero_asymptote</code> is often
-<strong>greater</strong> than <code>inf_asymptote</code>, so the numerator is positive.</p>
+<p>Sign is meaningful and canonical when <code>hill_params</code> came from
+:func:<code>~sprime.hill_fitting.fit_hill_curve</code>: inhibitory curves (response decreases with
+dose) have <code>zero_asymptote &gt; inf_asymptote</code> so S' &gt; 0; disinhibitory curves have S' &lt; 0.</p>
 <p>Requires hill_params to be set (call fit_hill_curve first).</p>
 <h2 id="returns">Returns</h2>
 <dl>
@@ -1482,6 +1485,12 @@ class HillCurveParams:
     ``zero_asymptote`` / ``inf_asymptote``. Do not substitute **inf - zero** (common in some 4PL
     &#34;amplitude&#34; wording): the sign differs and **S&#39;** is defined only with **zero - inf**.
 
+    **Sign convention:** :func:`~sprime.hill_fitting.fit_hill_curve` always returns parameters in
+    canonical form -- inhibitory curves (response decreases with dose) have
+    ``zero_asymptote &gt; inf_asymptote`` so S&#39; &gt; 0; disinhibitory curves have
+    ``zero_asymptote &lt; inf_asymptote`` so S&#39; &lt; 0. The sign of S&#39; therefore reliably tracks
+    biological curve direction for all fitted results.
+
     **Conceptual mapping:** In many pharmacology/biochemistry texts the exponent *n* in a
     linear-x Hill form is called the **Hill coefficient** (often linked to cooperativity).
     That is the same mathematical role as ``steepness_coefficient`` here. We use the name
@@ -1518,6 +1527,11 @@ which response value is numerically larger.</p>
 <p><strong>S':</strong> :math:<code>\mathrm{asinh}((\mathrm{zero} - \mathrm{inf}) / \mathrm{EC50})</code> with the same
 <code>zero_asymptote</code> / <code>inf_asymptote</code>. Do not substitute <strong>inf - zero</strong> (common in some 4PL
 "amplitude" wording): the sign differs and <strong>S'</strong> is defined only with <strong>zero - inf</strong>.</p>
+<p><strong>Sign convention:</strong> :func:<code>~sprime.hill_fitting.fit_hill_curve</code> always returns parameters in
+canonical form &ndash; inhibitory curves (response decreases with dose) have
+<code>zero_asymptote &gt; inf_asymptote</code> so S' &gt; 0; disinhibitory curves have
+<code>zero_asymptote &lt; inf_asymptote</code> so S' &lt; 0. The sign of S' therefore reliably tracks
+biological curve direction for all fitted results.</p>
 <p><strong>Conceptual mapping:</strong> In many pharmacology/biochemistry texts the exponent <em>n</em> in a
 linear-x Hill form is called the <strong>Hill coefficient</strong> (often linked to cooperativity).
 That is the same mathematical role as <code>steepness_coefficient</code> here. We use the name

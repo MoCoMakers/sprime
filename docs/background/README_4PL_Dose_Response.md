@@ -91,7 +91,7 @@ Many textbooks write the same shape as **y = D + (A - D) / (...)** with **A** = 
 - Describes how steeply the curve transitions between `zero_asymptote` and `inf_asymptote`
 - In other tools this is often loosely called "slope" or "Hill slope" (not the same number as log-x Hill slope)
 - Higher absolute values = steeper curve = more cooperative response
-- In **sprime** (linear-x 4PL, concentration on a linear scale in `(x/EC50)^n`): positive values = increasing curve (activation); negative values = decreasing curve (inhibition). Tools that use a **log-x 4PL** (log10 concentration in the exponent) may report a positive Hill slope for the same biological curve; the models are not interchangeable without conversion. See **[Linear-x vs log-x 4PL (Hill slope)](#linear-x-vs-log-x-4pl-hill-slope)** below.
+- In **sprime** (linear-x 4PL, concentration on a linear scale in `(x/EC50)^n`): the sign of `steepness_coefficient` in the raw optimizer output is not a reliable indicator of curve direction on its own, because `scipy` can converge to a degenerate negative-*n* parameterization for steep inhibitory curves that is mathematically equivalent but has a flipped sign. sprime applies a **post-fit canonicalization** step (see below) so that `steepness_coefficient` is always positive in returned results. Tools that use a **log-x 4PL** (log10 concentration in the exponent) may report a positive Hill slope for the same biological curve; the models are not interchangeable without conversion. See **[Linear-x vs log-x 4PL (Hill slope)](#linear-x-vs-log-x-4pl-hill-slope)** below.
 
 **Example:**
 - n = 1.5: moderate steepness, typical for many biological systems
@@ -102,6 +102,31 @@ Many textbooks write the same shape as **y = D + (A - D) / (...)** with **A** = 
 - Exponent n about 1: Simple binding (one molecule per target)
 - n > 1: Cooperative binding (multiple molecules work together)
 - n < 1: Negative cooperativity or multiple binding sites
+
+### Canonical sign convention and Kendall concordance
+
+The 4PL Hill equation has a mathematical degeneracy: for any inhibitory curve there exist two
+parameter sets -- one with positive *n* and one with negative *n* -- that produce identical fitted
+values at every concentration. `scipy` may converge to either basin depending on the starting seed
+and the steepness of the data. For steep, step-like inhibitory curves the negative-*n* basin is
+often reached, which swaps `zero_asymptote` and `inf_asymptote` and therefore flips the sign of
+S'.
+
+To eliminate this ambiguity, **sprime canonicalizes the fitted parameters** after every fit.
+Direction is detected by counting Kendall-concordant pairs across all dose-response measurements:
+a response pair is concordant-down when the higher-concentration point has the lower response.
+Counting across all *C(n, 2)* pairs (not just first vs last) makes the detection robust to a
+single noisy endpoint. Ties default to inhibitory (conservative for drug-screening contexts where
+most active compounds reduce viability). If the detected direction contradicts the asymptote
+ordering, `zero_asymptote` and `inf_asymptote` are swapped and `steepness_coefficient` is negated;
+this describes the same physical curve with the same r-squared.
+
+The result is a consistent sign convention in all returned `HillCurveParams`:
+
+| Curve type | `zero_asymptote` vs `inf_asymptote` | S' sign |
+|------------|--------------------------------------|---------|
+| Inhibitory (response decreases with dose) | `zero > inf` | positive |
+| Disinhibitory (response increases with dose) | `zero < inf` | negative |
 
 ## Linear-x vs log-x 4PL (Hill slope)
 

@@ -49,6 +49,12 @@ numerically consistent with the linear-x parameterization; compare log-x vs line
 <code>initial_steepness_coefficient</code> for guesses). That is the same role as the classical <strong>Hill
 coefficient</strong> <em>n</em> in linear-x Hill formulations; we avoid the name <code>hill_coefficient</code> here
 so it is not confused with log-x "Hill slope" outputs from other packages.</p>
+<p><strong>Sign convention:</strong> After fitting, parameters are always returned in <strong>canonical form</strong> using
+Kendall concordance over all dose-response pairs to detect the biological curve direction. For
+inhibitory curves (response decreases with dose), this guarantees <code>zero_asymptote &gt; inf_asymptote</code>
+and therefore S' &gt; 0. For disinhibitory curves, <code>zero_asymptote &lt; inf_asymptote</code> and S' &lt; 0. This
+prevents the degenerate negative-<em>n</em> parameterization that <code>scipy</code> can converge to for steep
+inhibitory curves, which would otherwise silently flip the sign of S'.</p>
 <p>Adapted to work with sprime's domain entities.</p>
 </section>
 <section>
@@ -109,7 +115,9 @@ so it is not confused with log-x "Hill slope" outputs from other packages.</p>
         **curve_fit_kwargs: Additional arguments passed to scipy.optimize.curve_fit
 
     Returns:
-        HillCurveParams: Fitted curve parameters with r-squared
+        HillCurveParams: Fitted curve parameters. steepness_coefficient sign and thus S&#39; direction
+        are determined by Kendall concordance: inhibitory curves (positive S&#39;) or disinhibitory
+        curves (negative S&#39;).
 
     Raises:
         ValueError: If inputs are invalid
@@ -144,8 +152,7 @@ so it is not confused with log-x "Hill slope" outputs from other packages.</p>
 
     # Auto-detect or use specified curve direction
     if curve_direction is None:
-        # Try both directions, return best fit
-        return _fit_with_auto_direction(
+        result = _fit_with_auto_direction(
             x_data,
             y_data,
             initial_zero_asymptote,
@@ -157,8 +164,7 @@ so it is not confused with log-x "Hill slope" outputs from other packages.</p>
             **curve_fit_kwargs,
         )
     else:
-        # Fit with specified direction
-        return _fit_single_direction(
+        result = _fit_single_direction(
             x_data,
             y_data,
             curve_direction,
@@ -169,7 +175,12 @@ so it is not confused with log-x "Hill slope" outputs from other packages.</p>
             maxfev,
             bounds,
             **curve_fit_kwargs,
-        )</code></pre>
+        )
+
+    # Enforce canonical sign convention regardless of which scipy basin was found.
+    # Inhibitory (data goes down) -&gt; zero &gt; inf -&gt; S&#39; positive.
+    # Activatory (data goes up)   -&gt; zero &lt; inf -&gt; S&#39; negative.
+    return _normalize_direction(result, y_data)</code></pre>
 </details>
 <div class="desc"><p>Fit four-parameter Hill equation to dose-response data.</p>
 <p>Fits a sigmoidal curve to concentration-response data and returns
@@ -205,8 +216,11 @@ Format: ([zero_asymptote_min, steepness_min, ec50_min, inf_asymptote_min],
 <h2 id="returns">Returns</h2>
 <dl>
 <dt><code>HillCurveParams</code></dt>
-<dd>Fitted curve parameters with r-squared</dd>
+<dd>Fitted curve parameters. steepness_coefficient sign and thus S' direction</dd>
+<dt><code>are determined by Kendall concordance</code></dt>
+<dd>inhibitory curves (positive S') or disinhibitory</dd>
 </dl>
+<p>curves (negative S').</p>
 <h2 id="raises">Raises</h2>
 <dl>
 <dt><code>ValueError</code></dt>
