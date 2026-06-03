@@ -475,4 +475,4 @@ Copyright (C) 2026 MoCo Maker Labs LLC
 
 - [DMV Petri Dish Computational Biology](https://compbio.dmvpetridish.com/) - Computational biology research group
 - [MoCo Makers](https://www.mocomakers.com/) - DIY tech/science community
-<!-- pypi-sync v=1 release=v0.2.1 -->
+<!-- pypi-sync v=1 release=v0.3.0 -->
